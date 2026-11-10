@@ -105,13 +105,17 @@ Garantiza la coherencia semántica de cada registro antes de permitir su paso a 
 - **Tratamiento de Nulos**: Imputación de valores faltantes mediante forward-fill (`ffill`) complementado con backward-fill (`bfill`) para casos iniciales, descartando filas residuales no recuperables.
 
 ### 3. Ingeniería de Características e Indicadores Técnicos
-- **SMA-7 (Simple Moving Average 7 días)**: Media móvil calculada sobre el precio de cierre (`Close`) para capturar la tendencia de corto plazo:
-  $$\text{SMA}_7 = \frac{1}{7} \sum_{i=0}^{6} \text{Close}_{t-i}$$
-- **SMA-30 (Simple Moving Average 30 días)**: Media móvil de medio plazo calculada sobre el precio de cierre:
-  $$\text{SMA}_{30} = \frac{1}{30} \sum_{i=0}^{29} \text{Close}_{t-i}$$
-- **Retorno Diario (Daily Return)**: Variación porcentual diaria del precio de cierre:
-  $$\text{Retorno}_t = \frac{\text{Close}_t - \text{Close}_{t-1}}{\text{Close}_{t-1}}$$
-  *(El día base inicial se normaliza a `0.0` para evitar valores nulos).*
+- **SMA-7 (Simple Moving Average 7 días)**: Media móvil calculada sobre el precio de cierre (`Close`) para capturar la tendencia de corto plazo.
+
+$$\text{SMA}_{7} = \frac{1}{7} \sum_{i=0}^{6} \text{Close}_{t-i}$$
+
+- **SMA-30 (Simple Moving Average 30 días)**: Media móvil de medio plazo calculada sobre el precio de cierre.
+
+$$\text{SMA}_{30} = \frac{1}{30} \sum_{i=0}^{29} \text{Close}_{t-i}$$
+
+- **Retorno Diario (Daily Return)**: Variación porcentual diaria del precio de cierre. El día base inicial se imputa a 0.0 para evitar valores nulos al inicio de la serie temporal.
+
+$$\text{Retorno}_{t} = \frac{\text{Close}_{t} - \text{Close}_{t-1}}{\text{Close}_{t-1}}$$
 
 ### 4. Almacenamiento Curado en S3 Silver
 Los datos enriquecidos se serializan como Parquet y se almacenan bajo la estructura particionada:
@@ -126,33 +130,35 @@ s3://<tu-bucket>/silver/market_data/ticker=NVDA/year=2026/month=10/NVDA_silver_2
 Para ejecutar las cargas hacia la nube real de AWS:
 
 ### 1. Crear Cuenta en AWS
-Ingresa a [aws.amazon.com](https://aws.amazon.com/) y regístrate en la **Capa Gratuita (Free Tier)**.
+Ingresa a [aws.amazon.com](https://aws.amazon.com/) y regístrate en la Capa Gratuita (Free Tier).
 
 ### 2. Crear el Bucket S3
 1. En la consola de AWS, busca el servicio **S3**.
 2. Haz clic en **Create bucket**.
-3. Asigna un nombre globalmente único, por ejemplo: `tech-market-data-lake-<tu-nombre>`.
+3. Asigna un nombre globalmente único (ej. `tech-market-data-lake-tu-nombre`).
 4. Selecciona tu región preferida (ej. `us-east-1`).
 5. Deja activada la opción **Block all public access** (seguridad por defecto).
 
 ### 3. Crear Usuario IAM y Access Keys
-1. En AWS IAM, ve a **Users** ➔ **Create user** (`pipeline-s3-writer`).
+1. En AWS IAM, ve a **Users ➔ Create user** (ej. `pipeline-s3-writer`).
 2. Asigna permisos directos (`AmazonS3FullAccess` o política restringida a tu bucket).
-3. En la pestaña **Security credentials**, crea una **Access Key** para CLI / Aplicación externa.
-4. Guarda de forma segura el `Access Key ID` y `Secret Access Key`.
+3. En la pestaña **Security credentials**, crea una **Access Key** para CLI / Aplicación local.
+4. Guarda de forma segura el `Access Key ID` y el `Secret Access Key`.
 
 ### 4. Configurar el archivo `.env`
-Copia la plantilla y configura tus variables de entorno:
+Copia la plantilla `.env.example` provista en este repositorio y configura tus credenciales locales:
+
 ```bash
 cp .env.example .env
 ```
 
-Parámetros en `.env`:
-```ini
+Configura tus variables dentro del nuevo archivo `.env`:
+
+```env
 AWS_ACCESS_KEY_ID=tu_access_key_aqui
 AWS_SECRET_ACCESS_KEY=tu_secret_key_aqui
 AWS_DEFAULT_REGION=us-east-1
-S3_BUCKET_NAME=tech-market-data-lake-<tu-nombre>
+S3_BUCKET_NAME=tech-market-data-lake-tu-nombre
 S3_BRONZE_PREFIX=bronze/market_data
 S3_SILVER_PREFIX=silver/market_data
 TARGET_TICKERS=NVDA,TSM,MSFT
@@ -162,7 +168,7 @@ STORAGE_FORMAT=parquet
 LOG_LEVEL=INFO
 ```
 
-> ⚠️ **IMPORTANTE**: Nunca compartas ni subas tu archivo `.env` al control de versiones. Está incluido en `.gitignore`.
+> ⚠️ **IMPORTANTE**: Nunca compartas ni subas tu archivo `.env` al control de versiones. Este archivo ya se encuentra excluido mediante `.gitignore`.
 
 ---
 
