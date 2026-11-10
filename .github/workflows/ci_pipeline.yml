@@ -28,9 +28,14 @@ jobs:
 
       - name: Execute Pytest Suite (with Moto AWS Mocks)
         env:
-          AWS_ACCESS_KEY_ID: mock_key
-          AWS_SECRET_ACCESS_KEY: mock_secret
+          PYTHONPATH: .
+          AWS_ACCESS_KEY_ID: testing_access_key
+          AWS_SECRET_ACCESS_KEY: testing_secret_key
+          AWS_SECURITY_TOKEN: testing_security_token
+          AWS_SESSION_TOKEN: testing_session_token
           AWS_DEFAULT_REGION: us-east-1
           S3_BUCKET_NAME: ci-mock-bucket
+          S3_BRONZE_PREFIX: bronze/market_data
+          S3_SILVER_PREFIX: silver/market_data
         run: |
-          pytest tests/ -v --tb=short
+          python -m pytest tests/ -v --tb=short

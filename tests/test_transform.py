@@ -9,7 +9,7 @@ Tests the Medallion Architecture Phase 2 Silver Layer implementation:
 
 from datetime import date, datetime, timedelta, timezone
 import io
-from typing import Generator
+from typing import Any, Generator
 from unittest.mock import MagicMock, patch
 
 import boto3
@@ -33,6 +33,11 @@ from src.transform import (
 TEST_BUCKET_NAME = "test-market-data-lake-silver"
 TEST_REGION = "us-east-1"
 
+# Dynamically computed dates relative to today's UTC date to guarantee consistency across environments
+TODAY_UTC = datetime.now(timezone.utc).date()
+VALID_PAST_DATE_STR = (TODAY_UTC - timedelta(days=5)).strftime("%Y-%m-%d")
+FUTURE_DATE_STR = (TODAY_UTC + timedelta(days=30)).strftime("%Y-%m-%d")
+
 
 @pytest.fixture(autouse=True)
 def aws_credentials_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -47,8 +52,9 @@ def aws_credentials_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def sample_raw_dataframe() -> pd.DataFrame:
-    """Fixture providing a mock 10-day raw DataFrame as extracted from Bronze layer."""
-    dates = pd.date_range(start="2026-10-01", periods=10, freq="D")
+    """Fixture providing a mock 10-day raw DataFrame with past dates as extracted from Bronze layer."""
+    start_date = TODAY_UTC - timedelta(days=15)
+    dates = pd.date_range(start=start_date, periods=10, freq="D")
     data = {
         "Date": [d.strftime("%Y-%m-%d") for d in dates],
         "ticker": ["NVDA"] * 10,
@@ -57,7 +63,7 @@ def sample_raw_dataframe() -> pd.DataFrame:
         "Low": [98.0 + i for i in range(10)],
         "Close": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0],
         "Volume": [1000000 + (i * 10000) for i in range(10)],
-        "ingested_at_utc": ["2026-10-25T12:00:00Z"] * 10,
+        "ingested_at_utc": [datetime.now(timezone.utc).isoformat()] * 10,
     }
     return pd.DataFrame(data)
 
@@ -80,7 +86,7 @@ class TestMarketRecordSchema:
     def test_valid_market_record_passes(self) -> None:
         """Verify that a valid financial record passes schema validation."""
         valid_data = {
-            "Date": "2026-10-25",
+            "Date": VALID_PAST_DATE_STR,
             "ticker": "NVDA",
             "Open": 135.50,
             "High": 138.20,
@@ -96,7 +102,7 @@ class TestMarketRecordSchema:
     def test_negative_price_raises_validation_error(self) -> None:
         """Verify that negative stock prices trigger validation errors."""
         invalid_data = {
-            "Date": "2026-10-25",
+            "Date": VALID_PAST_DATE_STR,
             "ticker": "NVDA",
             "Open": -10.0,  # Invalid: must be > 0
             "High": 138.20,
@@ -110,7 +116,7 @@ class TestMarketRecordSchema:
     def test_zero_price_raises_validation_error(self) -> None:
         """Verify that a zero stock price triggers a validation error (prices must be > 0)."""
         invalid_data = {
-            "Date": "2026-10-25",
+            "Date": VALID_PAST_DATE_STR,
             "ticker": "NVDA",
             "Open": 135.0,
             "High": 138.0,
@@ -124,7 +130,7 @@ class TestMarketRecordSchema:
     def test_negative_volume_raises_validation_error(self) -> None:
         """Verify that negative trading volume triggers a validation error."""
         invalid_data = {
-            "Date": "2026-10-25",
+            "Date": VALID_PAST_DATE_STR,
             "ticker": "TSM",
             "Open": 170.0,
             "High": 175.0,
@@ -138,7 +144,7 @@ class TestMarketRecordSchema:
     def test_missing_required_field_raises_validation_error(self) -> None:
         """Verify that omitting a required field triggers a validation error."""
         incomplete_data = {
-            "Date": "2026-10-25",
+            "Date": VALID_PAST_DATE_STR,
             "ticker": "MSFT",
             "Open": 425.0,
             # Missing High, Low, Close, Volume
@@ -148,9 +154,8 @@ class TestMarketRecordSchema:
 
     def test_future_date_raises_validation_error(self) -> None:
         """Verify that a record with a future date triggers a validation error."""
-        future_date = (date.today() + timedelta(days=30)).strftime("%Y-%m-%d")
         invalid_data = {
-            "Date": future_date,
+            "Date": FUTURE_DATE_STR,
             "ticker": "NVDA",
             "Open": 150.0,
             "High": 155.0,
@@ -165,7 +170,7 @@ class TestMarketRecordSchema:
     def test_high_less_than_low_raises_validation_error(self) -> None:
         """Verify that High price lower than Low price triggers a validation error."""
         invalid_data = {
-            "Date": "2026-10-25",
+            "Date": VALID_PAST_DATE_STR,
             "ticker": "NVDA",
             "Open": 135.0,
             "High": 130.0,  # Invalid: High < Low
@@ -180,7 +185,7 @@ class TestMarketRecordSchema:
     def test_empty_ticker_raises_validation_error(self) -> None:
         """Verify that an empty string ticker raises a validation error."""
         invalid_data = {
-            "Date": "2026-10-25",
+            "Date": VALID_PAST_DATE_STR,
             "ticker": "",  # Invalid: empty string
             "Open": 100.0,
             "High": 105.0,
@@ -224,7 +229,8 @@ class TestMathematicalPrecision:
         transformer = MarketDataTransformer(s3_client=MagicMock())
 
         # Construct a 35-day dataset where Close price = sequence from 1.0 to 35.0
-        dates = pd.date_range(start="2026-09-01", periods=35, freq="D")
+        start_date = TODAY_UTC - timedelta(days=40)
+        dates = pd.date_range(start=start_date, periods=35, freq="D")
         close_prices = [float(i + 1) for i in range(35)]
         df = pd.DataFrame({"Date": dates, "Close": close_prices})
 
@@ -246,12 +252,15 @@ class TestMathematicalPrecision:
         """Verify daily percentage return calculation formula ((Close_t - Close_{t-1}) / Close_{t-1})."""
         transformer = MarketDataTransformer(s3_client=MagicMock())
 
+        start_date = TODAY_UTC - timedelta(days=10)
+        dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(4)]
+
         # Day 0: 100.0 -> Daily Return: 0.0 (baseline)
         # Day 1: 110.0 -> Return: +10% (+0.10)
         # Day 2: 99.0  -> Return: (99 - 110) / 110 = -11 / 110 = -0.10 (-10%)
         # Day 3: 118.8 -> Return: (118.8 - 99) / 99 = +19.8 / 99 = +0.20 (+20%)
         df = pd.DataFrame({
-            "Date": ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"],
+            "Date": dates,
             "Close": [100.0, 110.0, 99.0, 118.8],
         })
 
@@ -266,8 +275,11 @@ class TestMathematicalPrecision:
         """Verify that null values in financial indicators are properly imputed with forward-fill."""
         transformer = MarketDataTransformer(s3_client=MagicMock())
 
+        start_date = TODAY_UTC - timedelta(days=10)
+        dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(4)]
+
         df_with_nulls = pd.DataFrame({
-            "Date": ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"],
+            "Date": dates,
             "Open": [100.0, np.nan, 102.0, np.nan],
             "High": [105.0, 106.0, np.nan, 108.0],
             "Low": [95.0, np.nan, 97.0, 98.0],
@@ -348,7 +360,7 @@ class TestMarketDataTransformerS3Integration:
         self, mock_s3: Any, sample_raw_dataframe: pd.DataFrame
     ) -> None:
         """Test complete end-to-end workflow: Bronze Parquet -> Transform -> Silver Parquet."""
-        bronze_key = "bronze/market_data/ticker=TSM/year=2026/month=10/TSM_20261025_120000.parquet"
+        bronze_key = "bronze/market_data/ticker=TSM/year=2026/month=10/TSM_test.parquet"
 
         # Prepare bronze artifact for TSM
         tsm_df = sample_raw_dataframe.copy()
@@ -377,8 +389,11 @@ class TestMarketDataTransformerS3Integration:
         """Verify that validate_records raises ValidationError when corrupted records exist."""
         transformer = MarketDataTransformer(s3_client=MagicMock())
 
+        start_date = TODAY_UTC - timedelta(days=5)
+        dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(2)]
+
         corrupt_df = pd.DataFrame({
-            "Date": ["2026-10-01", "2026-10-02"],
+            "Date": dates,
             "ticker": ["NVDA", "NVDA"],
             "Open": [100.0, -50.0],  # Row 1 has negative price
             "High": [105.0, 105.0],
