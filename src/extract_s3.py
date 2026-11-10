@@ -52,7 +52,7 @@ class PipelineConfig:
         interval: Optional[str] = None,
     ) -> None:
         """Initialize pipeline configuration with defaults and environment variables."""
-        self.bucket_name: str = bucket_name or os.getenv("S3_BUCKET_NAME", "tech-market-data-lake-raw")
+        self.bucket_name: str = bucket_name or os.getenv("S3_BUCKET_NAME", "tech-market-bronze-jsalgado")
         self.region_name: str = region_name or os.getenv("AWS_DEFAULT_REGION", "us-east-1")
         self.aws_access_key_id: Optional[str] = aws_access_key_id or os.getenv("AWS_ACCESS_KEY_ID")
         self.aws_secret_access_key: Optional[str] = (

@@ -15,7 +15,7 @@ Un Data Pipeline financiero de nivel empresarial diseñado con **Arquitectura Me
                                            ▼ (Fase 1: Extracción Raw)
                ┌────────────────────────────────────────────────────────┐
                │              CAPA BRONCE (RAW DATA LAKE)               │
-               │  AWS S3 Bucket: tech-market-data-lake-raw              │
+               │  AWS S3 Bucket: tech-market-bronze-jsalgado            │
                │  Path: bronze/market_data/ticker=NVDA/year=2026/...    │
                │  Format: Apache Parquet (Inmutable, Comprimido)        │
                └───────────────────────────┬────────────────────────────┘
@@ -161,14 +161,14 @@ Salida esperada:
 ```text
 [2026-10-25 20:30:15] [INFO] [market_pipeline.extract_s3]: Starting extraction for ticker: NVDA (Period: 1mo, Interval: 1d)
 [2026-10-25 20:30:16] [INFO] [market_pipeline.extract_s3]: Successfully fetched 22 records for NVDA
-[2026-10-25 20:30:17] [INFO] [market_pipeline.extract_s3]: Uploading PARQUET artifact to s3://tech-market-data-lake-raw/bronze/market_data/ticker=NVDA/year=2026/month=10/NVDA_20261025_203017.parquet
-[2026-10-25 20:30:18] [INFO] [market_pipeline.extract_s3]: Successfully uploaded artifact to s3://tech-market-data-lake-raw/...
+[2026-10-25 20:30:17] [INFO] [market_pipeline.extract_s3]: Uploading PARQUET artifact to s3://tech-market-bronze-jsalgado/bronze/market_data/ticker=NVDA/year=2026/month=10/NVDA_20261025_203017.parquet
+[2026-10-25 20:30:18] [INFO] [market_pipeline.extract_s3]: Successfully uploaded artifact to s3://tech-market-bronze-jsalgado/...
 
 Pipeline Execution Report:
 -------------------------
-✅ NVDA: 22 records -> s3://tech-market-data-lake-raw/bronze/market_data/ticker=NVDA/...
-✅ TSM: 22 records -> s3://tech-market-data-lake-raw/bronze/market_data/ticker=TSM/...
-✅ MSFT: 22 records -> s3://tech-market-data-lake-raw/bronze/market_data/ticker=MSFT/...
+✅ NVDA: 22 records -> s3://tech-market-bronze-jsalgado/bronze/market_data/ticker=NVDA/...
+✅ TSM: 22 records -> s3://tech-market-bronze-jsalgado/bronze/market_data/ticker=TSM/...
+✅ MSFT: 22 records -> s3://tech-market-bronze-jsalgado/bronze/market_data/ticker=MSFT/...
 ```
 
 ---
