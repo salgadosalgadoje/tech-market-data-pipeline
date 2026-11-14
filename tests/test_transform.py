@@ -271,6 +271,27 @@ class TestMathematicalPrecision:
         assert result_df.loc[2, "daily_return"] == pytest.approx(-0.10, rel=1e-5)
         assert result_df.loc[3, "daily_return"] == pytest.approx(0.20, rel=1e-5)
 
+    def test_volatility_7_mathematical_precision(self) -> None:
+        """Verify 7-day rolling volatility calculation, null handling, and non-negativity."""
+        transformer = MarketDataTransformer(s3_client=MagicMock())
+
+        start_date = TODAY_UTC - timedelta(days=20)
+        dates = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(10)]
+        df = pd.DataFrame({
+            "Date": dates,
+            "Close": [100.0, 102.0, 101.0, 104.0, 103.0, 106.0, 105.0, 108.0, 107.0, 110.0],
+        })
+
+        result_df = transformer.calculate_technical_indicators(df)
+
+        assert "volatility_7" in result_df.columns
+        assert result_df["volatility_7"].isna().sum() == 0
+        assert (result_df["volatility_7"] >= 0.0).all()
+        assert result_df.loc[0, "volatility_7"] == pytest.approx(0.0, abs=1e-6)
+
+        expected_std_index_6 = result_df.loc[0:6, "daily_return"].std()
+        assert result_df.loc[6, "volatility_7"] == pytest.approx(expected_std_index_6, rel=1e-5)
+
     def test_clean_data_handles_nulls_via_forward_fill(self) -> None:
         """Verify that null values in financial indicators are properly imputed with forward-fill."""
         transformer = MarketDataTransformer(s3_client=MagicMock())

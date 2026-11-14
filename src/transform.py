@@ -331,12 +331,13 @@ class MarketDataTransformer:
         return cleaned_df
 
     def calculate_technical_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate technical indicators on closing price (SMA-7, SMA-30, daily return).
+        """Calculate technical indicators on closing price (SMA-7, SMA-30, daily return, volatility-7).
 
         Indicators calculated:
         - SMA_7: Simple Moving Average over a 7-day window.
         - SMA_30: Simple Moving Average over a 30-day window.
         - daily_return: Daily percentage change in closing price ((Close_t - Close_{t-1}) / Close_{t-1}).
+        - volatility_7: 7-session rolling standard deviation of daily returns.
 
         Args:
             df: Cleaned DataFrame with 'Close' and 'Date' columns.
@@ -364,8 +365,16 @@ class MarketDataTransformer:
             enriched_df["Close"].pct_change().fillna(0.0).round(6)
         )
 
+        # 7-session rolling volatility (standard deviation of daily returns)
+        enriched_df["volatility_7"] = (
+            enriched_df["daily_return"]
+            .rolling(window=7, min_periods=1)
+            .std()
+            .fillna(0.0)
+        )
+
         logger.info(
-            "Calculated SMA_7, SMA_30, and daily_return for %d records.",
+            "Calculated SMA_7, SMA_30, daily_return, and volatility_7 for %d records.",
             len(enriched_df),
         )
         return enriched_df

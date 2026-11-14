@@ -1,65 +1,38 @@
 # 🚀 Tech Market Data Pipeline (Medallion Architecture)
 
+![CI Pipeline](https://github.com/salgadosalgadoje/tech-market-data-pipeline/actions/workflows/ci_pipeline.yml/badge.svg)
+![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
+![Apache Airflow](https://img.shields.io/badge/Apache%20Airflow-2.8.2-017CEE?logo=apacheairflow)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)
+![AWS S3](https://img.shields.io/badge/AWS-S3%20Data%20Lake-FF9900?logo=amazons3)
+
 Un Data Pipeline financiero de nivel empresarial diseñado con **Arquitectura Medallón (Bronze ➔ Silver ➔ Gold)**, almacenamiento inmutable en **AWS S3 Data Lake**, validación de esquemas con **Pydantic V2**, enriquecimiento analítico con **Pandas**, persistencia relacional optimizada e idempotente en **PostgreSQL (SQLAlchemy)**, orquestación productiva con **Apache Airflow (LocalExecutor en Docker)** y suite de pruebas automatizadas con **Pytest / Moto / SQLite / DagBag**.
 
 ---
 
-## 🏛️ Arquitectura General del Sistema
+## 🏛️ Arquitectura del Sistema
 
+```mermaid
+flowchart LR
+    A["Yahoo Finance API<br/>yfinance"] -->|"Fase 1: Extracción Raw"| B[("AWS S3 - Capa Bronce<br/>Parquet Particionado")]
+    B -->|"Fase 2: Pydantic V2 + Pandas"| C[("AWS S3 - Capa Plata<br/>SMA-7, SMA-30, Retorno, Volatilidad")]
+    C -->|"Fase 3: SQLAlchemy Upsert"| D[("PostgreSQL 16 - Capa Oro<br/>market_daily_metrics")]
+    D -->|"Consumo Analítico"| E["Streamlit / FastAPI"]
+
+    subgraph Orquestación y Calidad
+        F["Apache Airflow 2.8.2<br/>LocalExecutor en Docker"] -.->|"0 18 * * 1-5"| A
+        F -.-> B
+        F -.-> C
+        G["GitHub Actions CI/CD<br/>Pytest + Moto + DagBag"]
+    end
 ```
-                    ┌──────────────────────────────────────────────┐
-                    │               FUENTES EXTERNAS               │
-                    │         Yahoo Finance API (yfinance)         │
-                    └──────────────────────┬───────────────────────┘
-                                           │
-                                           ▼ (Fase 1: Extracción Raw)
-                ┌────────────────────────────────────────────────────────┐
-                │              CAPA BRONCE (RAW DATA LAKE)               │
-                │  AWS S3 Bucket: tech-market-bronze-jsalgado            │
-                │  Path: bronze/market_data/ticker=NVDA/year=2026/...    │
-                │  Format: Apache Parquet (Inmutable, Comprimido)        │
-                └───────────────────────────┬────────────────────────────┘
-                                           │
-                                           ▼ (Fase 2: Limpieza & Validación)
-                ┌────────────────────────────────────────────────────────┐
-                │             CAPA PLATA (SILVER / CURATED)              │
-                │  - Validación estricta con Pydantic V2                 │
-                │  - Imputación de nulos (ffill/bfill) con Pandas        │
-                │  - Indicadores técnicos (SMA-7, SMA-30, Retorno Diario)│
-                │  Path: silver/market_data/ticker=NVDA/year=2026/...    │
-                │  Format: Apache Parquet Curado                         │
-                └───────────────────────────┬────────────────────────────┘
-                                           │
-                                           ▼ (Fase 3: Warehouse & Analytics)
-                ┌────────────────────────────────────────────────────────┐
-                │               CAPA ORO (GOLD / ANALYTICS)              │
-                │  - Modelo ORM: MarketDailyMetrics (SQLAlchemy 2.x)     │
-                │  - Carga Idempotente: INSERT ... ON CONFLICT DO UPDATE │
-                │  - Clave Primaria Compuesta: (ticker, date)            │
-                │  - Índices B-Tree Optimizados para Series Temporales   │
-                │  - Base de Datos: PostgreSQL 16 (Docker)               │
-                │  - Consumo: Dashboards (Streamlit) / API (FastAPI)     │
-                └───────────────────────────┬────────────────────────────┘
-                                           │
-                     Fase 4: Orquestación Automatizada End-to-End
-        ┌─────────────────────────────────────────────────────────────────────────┐
-        │                 ORQUESTACIÓN CON APACHE AIRFLOW (DOCKER)                │
-        │  DAG: tech_market_etl_pipeline | Schedule: 0 18 * * 1-5 (Post-Mercado)   │
-        │  LocalExecutor (PostgreSQL) | max_active_runs=1 | retries=2 (delay 5m)  │
-        │  extract_bronze_task  >>  transform_silver_task  >>  load_gold_task     │
-        └─────────────────────────────────────────────────────────────────────────┘
-
-     [CI/CD: GitHub Actions (Python 3.11 + Airflow constraints + Pytest + Moto AWS Mocks)]
-```
-
-![Diagrama de Arquitectura del Pipeline de Datos](market_data_pipeline_architecture.jpg)
 
 ---
 
 ## 📂 Estructura del Repositorio
 
 ```text
-tech-market-pipeline/
+tech-market-data-pipeline/
 │
 ├── .github/
 │   └── workflows/
@@ -77,7 +50,7 @@ tech-market-pipeline/
 │   ├── transform.py               # [Fase 2] Validación Pydantic y cálculo de indicadores (Silver Layer)
 │   └── load_postgres.py           # [Fase 3] Modelo ORM, lectura S3 y Upsert en PostgreSQL (Gold Layer)
 │
-├── tests/                         # Suite de Pruebas Automatizadas (54 Items)
+├── tests/                         # Suite de Pruebas Automatizadas (55 Items)
 │   ├── __init__.py
 │   ├── test_extract.py            # [Fase 1] Pruebas de extracción con mock_aws (Moto)
 │   ├── test_transform.py          # [Fase 2] Validación de esquemas, indicadores y transformaciones
@@ -87,6 +60,7 @@ tech-market-pipeline/
 ├── .env.example                   # Plantilla de credenciales y variables de entorno
 ├── .gitignore                     # Protección de credenciales, logs y artefactos temporales
 ├── docker-compose.yml             # Infraestructura Docker: PostgreSQL 16 + Airflow (Webserver, Scheduler, Init)
+├── pytest.ini                     # Configuración estandarizada para ejecución de Pytest
 ├── requirements.txt               # Dependencias fijadas y compatibles de producción y testing
 └── README.md                      # Documentación técnica, arquitectónica y operativa
 ```
@@ -113,11 +87,11 @@ La Capa Plata convierte datos crudos en datasets limpios, validados y analítica
 
 ### 1. Validación de Calidad de Datos con Pydantic V2 (`MarketRecordSchema`)
 Garantiza la coherencia semántica de cada registro antes de permitir su paso a Silver:
-- **Precios Estrictamente Positivos**: `Open`, `High`, `Low` y `Close` deben ser mayores a 0 (`gt=0`).
+- **Precios Estrictamente Positivos**: `Open, High, Low, Close > 0` (`gt=0`).
 - **Coherencia de Rango de Precios**: Valida que `High >= Low` a nivel de registro.
-- **Volumen No Negativo**: `Volume >= 0`.
+- **Volumen No Negativo**: `Volume >= 0` (`ge=0`).
 - **Integridad Temporal**: Rechazo de registros con **fechas futuras** (`Date <= today_utc`).
-- **Símbolo Ticker Válido**: `ticker` no puede ser vacío.
+- **Símbolo Ticker Válido**: `ticker` no puede ser vacío (`min_length=1`).
 
 ### 2. Limpieza e Imputación con Pandas
 - **Orden Cronológico**: Conversión del campo `Date` a tipo datetime y orden ascendente.
@@ -135,6 +109,10 @@ $$\text{SMA}_{30} = \frac{1}{30} \sum_{i=0}^{29} \text{Close}_{t-i}$$
 - **Retorno Diario (Daily Return)**: Variación porcentual diaria del precio de cierre. El día base inicial se imputa a 0.0 para evitar valores nulos al inicio de la serie temporal:
 
 $$\text{Retorno}_{t} = \frac{\text{Close}_{t} - \text{Close}_{t-1}}{\text{Close}_{t-1}}$$
+
+- **Volatilidad Móvil 7 Sesiones (Volatility 7)**: Desviación estándar móvil de los retornos diarios con `min_periods=1` y `.fillna(0.0)` para garantizar estabilidad numérica sin generar nulos en el día inicial:
+
+$$\text{Volatilidad}_{7} = \sqrt{\frac{1}{N-1} \sum_{i=0}^{6} (\text{Retorno}_{t-i} - \overline{\text{Retorno}})^2}$$
 
 ### 4. Almacenamiento Curado en S3 Silver
 Los datos enriquecidos se serializan como Parquet y se almacenan bajo la estructura particionada:
@@ -164,6 +142,7 @@ El esquema de la tabla modela series temporales financieras con precisión atóm
 | `sma_7` | `FLOAT` | `NULLABLE` | Media Móvil Simple de 7 sesiones |
 | `sma_30` | `FLOAT` | `NULLABLE` | Media Móvil Simple de 30 sesiones |
 | `daily_return` | `FLOAT` | `NULLABLE` | Retorno porcentual respecto al cierre previo |
+| `volatility_7` | `FLOAT` | `NULLABLE` | Volatilidad móvil de 7 sesiones (desviación estándar) |
 | `transformed_at_utc` | `TIMESTAMPTZ` | `NULLABLE` | Marca temporal de procesamiento en Capa Plata |
 | `loaded_at_utc` | `TIMESTAMPTZ` | `NOT NULL` | Marca temporal de ingestión en Capa Oro |
 
@@ -189,7 +168,7 @@ En ingeniería de datos de producción, las fallas transitorias de red o las re-
 
 La Capa Oro implementa el patrón **UPSERT** mediante la cláusula nativa:
 ```sql
-INSERT INTO market_daily_metrics (ticker, date, open, high, low, close, volume, sma_7, sma_30, daily_return, transformed_at_utc, loaded_at_utc)
+INSERT INTO market_daily_metrics (ticker, date, open, high, low, close, volume, sma_7, sma_30, daily_return, volatility_7, transformed_at_utc, loaded_at_utc)
 VALUES (...)
 ON CONFLICT (ticker, date) 
 DO UPDATE SET
@@ -201,6 +180,7 @@ DO UPDATE SET
     sma_7 = EXCLUDED.sma_7,
     sma_30 = EXCLUDED.sma_30,
     daily_return = EXCLUDED.daily_return,
+    volatility_7 = EXCLUDED.volatility_7,
     transformed_at_utc = EXCLUDED.transformed_at_utc,
     loaded_at_utc = EXCLUDED.loaded_at_utc;
 ```
@@ -328,7 +308,7 @@ Se implementó una suite automatizada de pruebas con `pytest` estructurada en do
    - `test_dagbag_no_import_errors`: Confirma que `len(dagbag.import_errors) == 0`.
    - `test_dag_loaded_successfully`: Verifica que el DAG esté registrado.
    - `test_dag_no_cycles`: Ejecuta `check_cycle(dag)` para garantizar que no existan ciclos infinitos o bloqueos mutuos.
-   - `test_dag_configuration_and_retries`: Valida schedule, `catchup=False`, `max_active_runs=1` y reintentos (`retries=2`, `retry_delay=5m`).
+   - `test_dag_configuration_and_retries`: Valida schedule, `catchup=False`, `max_active_runs=1` y reintentos (`retries=2`, `retry_delay=timedelta(minutes=5)`).
    - `test_dag_has_exact_expected_tasks`: Comprueba la existencia exacta de las 3 tareas esperadas.
    - `test_dag_sequential_dependencies`: Valida rigurosamente la secuencia:
      - `extract_bronze_task` ➔ Upstream: `{}`, Downstream: `{"transform_silver_task"}`
@@ -403,6 +383,11 @@ Para ingresar a la consola interactiva de PostgreSQL:
 docker exec -it tech_market_postgres psql -U postgres -d market_data
 ```
 
+> 💡 **Nota sobre Base de Datos Existente**: Si ya contabas con un contenedor previo y deseas incorporar la columna `volatility_7` sin reiniciar el volumen persistente:
+> ```bash
+> docker exec -it tech_market_postgres psql -U postgres -d market_data -c "ALTER TABLE market_daily_metrics ADD COLUMN IF NOT EXISTS volatility_7 FLOAT;"
+> ```
+
 ---
 
 ## 💻 Instalación y Ejecución Local
@@ -424,11 +409,11 @@ pip install -r requirements.txt
 ```
 
 ### 3. Ejecutar la Suite de Pruebas Automatizadas
-La suite contiene **54 items de prueba** que garantizan la integridad de las 4 fases:
+La suite contiene **55 items de prueba** que garantizan la integridad de las 4 fases:
 
 ```bash
-# Ejecutar todas las pruebas del repositorio
-pytest tests/ -v
+# Ejecutar todas las pruebas del repositorio (usando pytest.ini)
+pytest -v
 
 # Ejecutar las pruebas de integridad del DAG de Airflow
 pytest tests/test_dag_integrity.py -v
@@ -440,17 +425,19 @@ pytest tests/test_load_postgres.py -v
 Resultado de ejecución en entorno local:
 ```text
 ============================= test session starts =============================
-collected 54 items
+configfile: pytest.ini
+testpaths: tests
+collected 55 items
 
 tests/test_dag_integrity.py::TestDAGStaticStructure::test_dag_file_exists PASSED [  1%]
 tests/test_dag_integrity.py::TestDAGStaticStructure::test_dag_syntax_compilation PASSED [  3%]
 tests/test_dag_integrity.py::TestDAGStaticStructure::test_ast_contains_required_definitions PASSED [  5%]
 tests/test_dag_integrity.py::TestAirflowDAGIntegrity::* SKIPPED (ejecutado en CI/Docker)
-tests/test_extract.py .........                                          [ 37%]
-tests/test_load_postgres.py ...............                              [ 66%]
-tests/test_transform.py ..................                               [100%]
+tests/test_extract.py .........                                          [ 36%]
+tests/test_load_postgres.py ...............                              [ 65%]
+tests/test_transform.py ....................                             [100%]
 
-======================= 45 passed, 9 skipped in 28.77s ========================
+======================== 46 passed, 9 skipped in 7.68s ========================
 ```
 
 ---
@@ -475,7 +462,7 @@ El workflow [.github/workflows/ci_pipeline.yml](.github/workflows/ci_pipeline.ym
 Puedes conectarte a la base de datos y lanzar consultas analíticas para verificar la calidad de los datos cargados:
 
 ```sql
--- Consultar las métricas financieras más recientes con sus indicadores técnicos
+-- Consultar las métricas financieras más recientes con sus indicadores técnicos y volatilidad
 SELECT 
     ticker,
     date,
@@ -483,6 +470,7 @@ SELECT
     sma_7,
     sma_30,
     ROUND((daily_return * 100)::numeric, 2) AS return_pct,
+    ROUND((volatility_7 * 100)::numeric, 2) AS vol_7_pct,
     volume,
     loaded_at_utc
 FROM market_daily_metrics
@@ -493,23 +481,7 @@ LIMIT 10;
 ---
 
 ## 🔮 Roadmap del Proyecto
-- [x] **Fase 1: Capa Bronce (Raw S3 Data Lake & Moto Testing)**
-  - Ingestión desde Yahoo Finance y almacenamiento inmutable en Apache Parquet particionado.
-  - Pruebas automatizadas con emulación `moto` de AWS S3.
-- [x] **Fase 2: Capa Plata (Silver / Curated Layer)**
-  - Validación de esquemas con Pydantic V2 (precios positivos, fechas válidas, coherencia High/Low).
-  - Limpieza de datos (imputación forward-fill / backward-fill).
-  - Cálculo de indicadores técnicos: SMA-7, SMA-30 y Retorno Diario.
-  - Almacenamiento curado en Parquet particionado en S3 Silver.
-- [x] **Fase 3: Capa Oro (Gold / Analytics Layer - PostgreSQL)**
-  - Modelo ORM `MarketDailyMetrics` con SQLAlchemy e indexación B-Tree de series temporales.
-  - Lógica de Upsert idempotente (`INSERT ... ON CONFLICT (ticker, date) DO UPDATE`).
-  - Suite de 15 pruebas de integración con base de datos SQLite en memoria y simulación S3.
-- [x] **Fase 4: Orquestación con Apache Airflow (Workflow Management)**
-  - DAG `tech_market_etl_pipeline` programado a las 18:00 UTC (L-V) tras el cierre de mercado (`0 18 * * 1-5`).
-  - Pipeline secuencial Medallón: `extract_bronze_task >> transform_silver_task >> load_gold_task`.
-  - Configuración productiva con `LocalExecutor`, PostgreSQL metadata store y Docker Compose.
-  - Mitigación de conflictos binarios (`pyarrow<17.0.0`, `numpy<2.0.0`) y volumen para logs persistentes.
-  - Suite de pruebas de integridad del DAG con `DagBag`, análisis AST y comprobación de aciclicidad (`check_cycle`).
-  - Pipeline de CI/CD en GitHub Actions con `airflow db migrate` y ejecución de Pytest.
-- [ ] **Fase 5: Visualización y Consumo**: Dashboard analítico interactivo con Streamlit y endpoints REST con FastAPI.
+
+- [x] **Fases 1–4**: Ingesta Bronze (AWS S3), Curación Silver (Pydantic V2 / Pandas), Warehouse Gold (PostgreSQL Upsert) y Orquestación Automatizada (Apache Airflow 2.8.2 + CI/CD en GitHub Actions).
+- [ ] **Fase 5 (Próximo paso)**: Capa de consumo analítico mediante dashboard interactivo en Streamlit y endpoints REST en FastAPI.
+- [ ] **Fase 6 (Producción Cloud)**: Despliegue continuo en AWS ECS / EC2 con base de datos administrada en AWS RDS y alertas de fallo vía Slack/Email.

@@ -102,6 +102,7 @@ def sample_silver_dataframe() -> pd.DataFrame:
         "SMA_7": [121.0 + i for i in range(5)],
         "SMA_30": [115.0 + i for i in range(5)],
         "daily_return": [0.0, 0.012, -0.005, 0.018, 0.009],
+        "volatility_7": [0.0, 0.005, 0.008, 0.012, 0.007],
         "transformed_at_utc": [datetime.now(timezone.utc).isoformat()] * 5,
     }
     return pd.DataFrame(data)
@@ -135,6 +136,10 @@ def test_table_creation_and_composite_primary_key(sqlite_engine: Engine) -> None
     pk_constraint = inspector.get_pk_constraint("market_daily_metrics")
     pk_columns = pk_constraint.get("constrained_columns", [])
     assert set(pk_columns) == {"ticker", "date"}, f"Expected PK on (ticker, date), got {pk_columns}"
+
+    # Verify column existence including technical indicators
+    columns = {col["name"] for col in inspector.get_columns("market_daily_metrics")}
+    assert "volatility_7" in columns, "Expected 'volatility_7' column in market_daily_metrics table"
 
 
 def test_table_indexes_configuration(sqlite_engine: Engine) -> None:
@@ -181,6 +186,7 @@ def test_strict_upsert_insert_then_update_single_record(
             "sma_7": 101.0,
             "sma_30": 98.0,
             "daily_return": 0.015,
+            "volatility_7": 0.012,
             "transformed_at_utc": datetime(2026, 3, 1, 18, 0, 0, tzinfo=timezone.utc),
             "loaded_at_utc": datetime(2026, 3, 1, 18, 5, 0, tzinfo=timezone.utc),
         }
@@ -214,6 +220,7 @@ def test_strict_upsert_insert_then_update_single_record(
             "sma_7": 106.2,  # Changed
             "sma_30": 100.1,  # Changed
             "daily_return": 0.0907,  # Changed
+            "volatility_7": 0.035,  # Changed
             "transformed_at_utc": datetime(2026, 3, 1, 20, 0, 0, tzinfo=timezone.utc),
             "loaded_at_utc": datetime(2026, 3, 1, 20, 10, 0, tzinfo=timezone.utc),
         }
@@ -239,6 +246,7 @@ def test_strict_upsert_insert_then_update_single_record(
     assert row.sma_7 == 106.2, f"Expected sma_7=106.2, got {row.sma_7}"
     assert row.sma_30 == 100.1, f"Expected sma_30=100.1, got {row.sma_30}"
     assert row.daily_return == 0.0907, f"Expected daily_return=0.0907, got {row.daily_return}"
+    assert row.volatility_7 == 0.035, f"Expected volatility_7=0.035, got {row.volatility_7}"
 
 
 def test_batch_upsert_idempotence(

@@ -96,6 +96,11 @@ class MarketDailyMetrics(Base):
     sma_7 = Column(Float, nullable=True, doc="7-day Simple Moving Average on closing price.")
     sma_30 = Column(Float, nullable=True, doc="30-day Simple Moving Average on closing price.")
     daily_return = Column(Float, nullable=True, doc="Daily percentage return of closing price.")
+    volatility_7 = Column(
+        Float,
+        nullable=True,
+        doc="7-day rolling volatility (standard deviation of daily returns).",
+    )
     transformed_at_utc = Column(
         DateTime(timezone=True),
         nullable=True,
@@ -385,7 +390,7 @@ class PostgresDataLoader:
         df_norm["volume"] = df_norm["volume"].astype("int64")
 
         # Optional technical indicators
-        for col in ["sma_7", "sma_30", "daily_return"]:
+        for col in ["sma_7", "sma_30", "daily_return", "volatility_7"]:
             if col in df_norm.columns:
                 df_norm[col] = pd.to_numeric(df_norm[col], errors="coerce")
             else:
