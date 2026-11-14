@@ -1,6 +1,6 @@
 # 🚀 Tech Market Data Pipeline (Medallion Architecture)
 
-Un Data Pipeline financiero de nivel empresarial diseñado con **Arquitectura Medallón (Bronze ➔ Silver ➔ Gold)**, almacenamiento inmutable en **AWS S3 Data Lake**, validación de esquemas con **Pydantic V2**, enriquecimiento analítico con **Pandas**, persistencia relacional optimizada e idempotente en **PostgreSQL (SQLAlchemy)**, orquestación lista para **Apache Airflow** y pruebas automatizadas con **Pytest / Moto / SQLite**.
+Un Data Pipeline financiero de nivel empresarial diseñado con **Arquitectura Medallón (Bronze ➔ Silver ➔ Gold)**, almacenamiento inmutable en **AWS S3 Data Lake**, validación de esquemas con **Pydantic V2**, enriquecimiento analítico con **Pandas**, persistencia relacional optimizada e idempotente en **PostgreSQL (SQLAlchemy)**, orquestación productiva con **Apache Airflow (LocalExecutor en Docker)** y suite de pruebas automatizadas con **Pytest / Moto / SQLite / DagBag**.
 
 ---
 
@@ -39,9 +39,17 @@ Un Data Pipeline financiero de nivel empresarial diseñado con **Arquitectura Me
                 │  - Índices B-Tree Optimizados para Series Temporales   │
                 │  - Base de Datos: PostgreSQL 16 (Docker)               │
                 │  - Consumo: Dashboards (Streamlit) / API (FastAPI)     │
-                └────────────────────────────────────────────────────────┘
+                └───────────────────────────┬────────────────────────────┘
+                                           │
+                     Fase 4: Orquestación Automatizada End-to-End
+        ┌─────────────────────────────────────────────────────────────────────────┐
+        │                 ORQUESTACIÓN CON APACHE AIRFLOW (DOCKER)                │
+        │  DAG: tech_market_etl_pipeline | Schedule: 0 18 * * 1-5 (Post-Mercado)   │
+        │  LocalExecutor (PostgreSQL) | max_active_runs=1 | retries=2 (delay 5m)  │
+        │  extract_bronze_task  >>  transform_silver_task  >>  load_gold_task     │
+        └─────────────────────────────────────────────────────────────────────────┘
 
-    [Orquestación: Apache Airflow (Docker)]  ◄---►  [CI/CD: GitHub Actions + Pytest]
+     [CI/CD: GitHub Actions (Python 3.11 + Airflow constraints + Pytest + Moto AWS Mocks)]
 ```
 
 ![Diagrama de Arquitectura del Pipeline de Datos](market_data_pipeline_architecture.jpg)
@@ -53,8 +61,15 @@ Un Data Pipeline financiero de nivel empresarial diseñado con **Arquitectura Me
 ```text
 tech-market-pipeline/
 │
+├── .github/
+│   └── workflows/
+│       └── ci_pipeline.yml        # CI/CD: Pipeline automatizado en GitHub Actions (Pytest + Airflow)
+│
 ├── dags/                          # Grafos Acíclicos Dirigidos (DAGs) de Apache Airflow
-│   └── finance_etl_dag.py         # Definición de DAG orquestador diario
+│   └── finance_etl_dag.py         # [Fase 4] DAG de orquestación diaria Medallón (Bronze -> Silver -> Gold)
+│
+├── logs/                          # Logs de ejecución de Apache Airflow (volumen montado)
+│   └── .gitkeep
 │
 ├── src/                           # Código fuente del pipeline ETL Medallion
 │   ├── __init__.py
@@ -62,17 +77,18 @@ tech-market-pipeline/
 │   ├── transform.py               # [Fase 2] Validación Pydantic y cálculo de indicadores (Silver Layer)
 │   └── load_postgres.py           # [Fase 3] Modelo ORM, lectura S3 y Upsert en PostgreSQL (Gold Layer)
 │
-├── tests/                         # Suite de Pruebas Unitarias e Integración (42 Tests)
+├── tests/                         # Suite de Pruebas Automatizadas (54 Items)
 │   ├── __init__.py
 │   ├── test_extract.py            # [Fase 1] Pruebas de extracción con mock_aws (Moto)
 │   ├── test_transform.py          # [Fase 2] Validación de esquemas, indicadores y transformaciones
-│   └── test_load_postgres.py      # [Fase 3] Pruebas de integración con SQLite in-memory y Upsert
+│   ├── test_load_postgres.py      # [Fase 3] Pruebas de integración con SQLite in-memory y Upsert
+│   └── test_dag_integrity.py      # [Fase 4] Integridad estática AST, DagBag, aciclicidad y dependencias
 │
 ├── .env.example                   # Plantilla de credenciales y variables de entorno
-├── .gitignore                     # Protección de credenciales y artefactos temporales
-├── docker-compose.yml             # Contenedores para PostgreSQL 16 y Apache Airflow
-├── requirements.txt               # Dependencias de producción y suite de pruebas
-└── README.md                      # Documentación arquitectónica y operativa
+├── .gitignore                     # Protección de credenciales, logs y artefactos temporales
+├── docker-compose.yml             # Infraestructura Docker: PostgreSQL 16 + Airflow (Webserver, Scheduler, Init)
+├── requirements.txt               # Dependencias fijadas y compatibles de producción y testing
+└── README.md                      # Documentación técnica, arquitectónica y operativa
 ```
 
 ---
@@ -194,10 +210,132 @@ DO UPDATE SET
 - **Auto-corrección de Datos**: Si un dato histórico sufre un split o ajuste posterior en la Capa Plata, el Upsert actualiza automáticamente los registros existentes.
 - **Dialecto Polimórfico**: El loader detecta dinámicamente si corre sobre `PostgreSQL` (en producción) o `SQLite` (en CI y tests locales), utilizando `dialects.postgresql.insert` o `dialects.sqlite.insert` respectivamente.
 
-### 4. Lectura Inteligente desde S3 Silver
-- Conexión vía `boto3` para explorar el prefijo `silver/market_data/ticker={ticker}/`.
-- Detección automática del Parquet más reciente para cada activo mediante ordenación lexicográfica y timestamps ISO.
-- Streaming a memoria vía `io.BytesIO` y parseo con `pyarrow`.
+---
+
+## ⏱️ Fase 4: Orquestación con Apache Airflow (Workflow Management)
+
+La Fase 4 integra las 3 capas en un flujo de trabajo continuo, programado y tolerante a fallos orquestado por **Apache Airflow 2.8.2**, desplegado en contenedores Docker y configurado con **`LocalExecutor`** respaldado por PostgreSQL.
+
+### 1. Definición del DAG (`dags/finance_etl_dag.py`)
+
+El DAG `tech_market_etl_pipeline` implementa un flujo acíclico estricto con las siguientes especificaciones operativas:
+
+- **Identificador**: `tech_market_etl_pipeline`
+- **Cadencia Cron**: `0 18 * * 1-5` (Lunes a viernes a las 18:00 UTC / 6:00 PM EST, asegurando la captura de datos oficiales post-cierre de Wall Street).
+- **Control de Ejecución**:
+  - `catchup=False`: Previene ejecuciones históricas masivas accidentales al registrar el DAG por primera vez.
+  - `max_active_runs=1`: Evita que ejecuciones consecutivas compitan por los mismos prefijos de S3 o bloqueen transacciones de base de datos.
+- **Política de Reintentos (SLA & Resilience)**:
+  - `retries=2`: Ante caídas transitorias de API o saturación de red en S3.
+  - `retry_delay=timedelta(minutes=5)`: Espera progresiva antes de disparar el reintento.
+
+```python
+default_args = {
+    "owner": "data_engineering",
+    "depends_on_past": False,
+    "email_on_failure": False,
+    "email_on_retry": False,
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
+}
+
+with DAG(
+    dag_id="tech_market_etl_pipeline",
+    default_args=default_args,
+    description="Daily Medallion ETL pipeline for tech stocks (NVDA, TSM, MSFT) post market close",
+    schedule="0 18 * * 1-5",
+    start_date=datetime(2026, 1, 1),
+    catchup=False,
+    max_active_runs=1,
+    tags=["finance", "medallion", "s3", "postgres", "etl"],
+) as dag:
+    extract_bronze_task >> transform_silver_task >> load_gold_task
+```
+
+### 2. Dependencias y Tareas Secuenciales
+
+Las tareas utilizan el operador `PythonOperator` e invocan limpiamente los módulos principales del paquete `src`:
+
+```
+   ┌───────────────────────┐
+   │  extract_bronze_task  │ ──► Ingestión Raw (yfinance ➔ S3 Bronze Parquet)
+   └──────────┬────────────┘
+              │
+              ▼
+   ┌───────────────────────┐
+   │ transform_silver_task │ ──► Validación Pydantic V2 + Limpieza + Indicadores (S3 Silver)
+   └──────────┬────────────┘
+              │
+              ▼
+   ┌───────────────────────┐
+   │    load_gold_task     │ ──► Carga e Idempotent Upsert en PostgreSQL (Gold Warehouse)
+   └───────────────────────┘
+```
+
+- **Resolución Limpia de Rutas (`sys.path`)**:
+  El DAG resuelve dinámicamente `PROJECT_ROOT` y `SRC_DIR` en tiempo de carga:
+  ```python
+  DAGS_DIR = Path(__file__).resolve().parent
+  PROJECT_ROOT = DAGS_DIR.parent
+  SRC_DIR = PROJECT_ROOT / "src"
+
+  for path in (PROJECT_ROOT, SRC_DIR):
+      if str(path) not in sys.path:
+          sys.path.insert(0, str(path))
+  ```
+  Esto garantiza que tanto el Webserver como el Scheduler resuelvan `from src.extract_s3 import ...` sin requerir modificaciones manuales al entorno de ejecución.
+
+- **Manejo Robusto de Excepciones**:
+  Cada tarea valida el resultado devuelto (`summary["status"]`). Si se reporta `FAILURE` o `PARTIAL_FAILURE`, se eleva un `RuntimeError`, permitiendo que el motor de Airflow detecte el fallo y active su política de reintentos con métricas claras en los logs.
+
+### 3. Infraestructura Docker Compose (`docker-compose.yml`)
+
+La arquitectura de contenedores desacopla la persistencia de datos y el motor de orquestación utilizando anclas YAML (`x-airflow-common`):
+
+1. **LocalExecutor Productivo**:
+   Se evita el uso del `SequentialExecutor` (mono-hilo y basado en SQLite) en favor de `LocalExecutor` respaldado por PostgreSQL:
+   ```yaml
+   AIRFLOW__CORE__EXECUTOR: LocalExecutor
+   AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+   ```
+2. **Aislamiento de Red y Host de Base de Datos**:
+   - `env_file: [ .env ]` hereda automáticamente las credenciales de AWS, tickers y parámetros generales.
+   - **Sobrescritura Crítica de Red**: Se fuerza `POSTGRES_HOST: postgres` en la configuración de Airflow para que resuelva el contenedor de la base de datos dentro de la red `tech_market_net`, evitando que intente conectarse al `localhost` del host.
+3. **Volúmenes Persistentes**:
+   - `./dags:/opt/airflow/dags`: Sincronización en vivo de los DAGs.
+   - `./src:/opt/airflow/src`: Código fuente del pipeline ETL.
+   - `./logs:/opt/airflow/logs`: Logs estructurados de tareas.
+   - `postgres_data:/var/lib/postgresql/data`: Almacenamiento persistente de datos.
+4. **Fijación de Compatibilidad Binaria**:
+   Se asegura la compatibilidad entre paquetes en `_PIP_ADDITIONAL_REQUIREMENTS`:
+   ```yaml
+   _PIP_ADDITIONAL_REQUIREMENTS: "yfinance>=0.2.36 boto3>=1.34.0 pandas>=2.1.4 pydantic>=2.6.0 fastparquet>=2024.2.0 pyarrow<17.0.0 numpy<2.0.0"
+   ```
+   *(Las restricciones `pyarrow<17.0.0` y `numpy<2.0.0` previenen conflictos de extensiones C entre NumPy 2.x y PyArrow en entornos recreados).*
+5. **Servicio `airflow-init`**:
+   Ejecuta automáticamente las migraciones (`airflow db migrate`) y provisiona el usuario administrador (`admin` / `admin`) con validación de salud (`service_healthy`) de PostgreSQL.
+6. **Airflow Webserver**:
+   Expone el dashboard interactivo de monitoreo en el puerto `8080` con healthcheck automático sobre `/health`.
+
+### 4. Pruebas de Integridad del DAG (`tests/test_dag_integrity.py`)
+
+Se implementó una suite automatizada de pruebas con `pytest` estructurada en dos niveles:
+
+1. **Validación Estática de AST (`TestDAGStaticStructure`)**:
+   - Analiza el árbol sintáctico abstracto (AST) del DAG sin necesidad de tener Airflow instalado en el entorno anfitrión.
+   - Valida compilación sin errores, presencia del identificador `tech_market_etl_pipeline`, la cadencia `0 18 * * 1-5`, las tres tareas y el operador de encadenamiento `>>`.
+2. **Integridad Dinámica con `DagBag` (`TestAirflowDAGIntegrity`)**:
+   - `test_dagbag_no_import_errors`: Confirma que `len(dagbag.import_errors) == 0`.
+   - `test_dag_loaded_successfully`: Verifica que el DAG esté registrado.
+   - `test_dag_no_cycles`: Ejecuta `check_cycle(dag)` para garantizar que no existan ciclos infinitos o bloqueos mutuos.
+   - `test_dag_configuration_and_retries`: Valida schedule, `catchup=False`, `max_active_runs=1` y reintentos (`retries=2`, `retry_delay=5m`).
+   - `test_dag_has_exact_expected_tasks`: Comprueba la existencia exacta de las 3 tareas esperadas.
+   - `test_dag_sequential_dependencies`: Valida rigurosamente la secuencia:
+     - `extract_bronze_task` ➔ Upstream: `{}`, Downstream: `{"transform_silver_task"}`
+     - `transform_silver_task` ➔ Upstream: `{"extract_bronze_task"}`, Downstream: `{"load_gold_task"}`
+     - `load_gold_task` ➔ Upstream: `{"transform_silver_task"}`, Downstream: `{}`
+3. **Manejo de Excepciones (`TestTaskExecutionLogic`)**:
+   - Simula escenarios de falla en las capas y comprueba que las funciones ejecutoras lancen `RuntimeError` para activar los reintentos de Airflow.
 
 ---
 
@@ -238,20 +376,27 @@ DATABASE_URL=postgresql+psycopg2://postgres:tu_password_seguro@localhost:5432/ma
 
 ---
 
-## 🐳 Despliegue de la Base de Datos Local con Docker
+## 🐳 Despliegue Completo con Docker Compose
 
-El repositorio incluye un [`docker-compose.yml`](docker-compose.yml) listo para producción local que despliega PostgreSQL 16 con volumen persistente y healthcheck:
+El archivo [`docker-compose.yml`](docker-compose.yml) orquesta la base de datos PostgreSQL 16 y el ecosistema completo de Apache Airflow:
 
 ```bash
-# 1. Iniciar el servicio PostgreSQL en segundo plano
-docker-compose up -d postgres
+# 1. Iniciar toda la infraestructura en segundo plano
+docker-compose up -d
 
-# 2. Verificar el estado del contenedor
-docker-compose ps postgres
+# 2. Verificar el estado de los contenedores
+docker-compose ps
 
-# 3. (Opcional) Inspeccionar los logs del motor relacional
-docker-compose logs -f postgres
+# 3. Inspeccionar logs del scheduler o webserver si se requiere
+docker-compose logs -f airflow-scheduler
 ```
+
+### Acceso a la Interfaz Web de Airflow:
+- **URL**: [http://localhost:8080](http://localhost:8080)
+- **Usuario**: `admin`
+- **Contraseña**: `admin`
+
+Desde la interfaz de usuario de Airflow, activa el switch del DAG `tech_market_etl_pipeline` o ejecútalo manualmente haciendo clic en **Trigger DAG**.
 
 Para ingresar a la consola interactiva de PostgreSQL:
 ```bash
@@ -278,76 +423,50 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Ejecutar la Suite de Pruebas Automatizadas (Pytest + Moto + SQLite)
-El pipeline cuenta con **42 pruebas automatizadas** que cubren las 3 capas sin necesidad de infraestructura de nube real ni bases de datos activas en CI:
+### 3. Ejecutar la Suite de Pruebas Automatizadas
+La suite contiene **54 items de prueba** que garantizan la integridad de las 4 fases:
 
 ```bash
-# Ejecutar la suite completa (42 pruebas)
+# Ejecutar todas las pruebas del repositorio
 pytest tests/ -v
 
-# Ejecutar específicamente las pruebas de la Capa Oro (15 pruebas de integración)
+# Ejecutar las pruebas de integridad del DAG de Airflow
+pytest tests/test_dag_integrity.py -v
+
+# Ejecutar las pruebas de la Capa Oro (PostgreSQL Upsert)
 pytest tests/test_load_postgres.py -v
 ```
 
-#### Cobertura de Pruebas de la Capa Oro:
-- ✅ `test_table_creation_and_composite_primary_key`: Creación de DDL y validación de PK compuesta `(ticker, date)`.
-- ✅ `test_table_indexes_configuration`: Verificación de índices B-Tree optimizados.
-- ✅ `test_strict_upsert_insert_then_update_single_record`: **Prueba de fuego del Upsert** (inserción de un registro y actualización posterior del mismo `ticker/date`, verificando conteo exacto de 1 fila y actualización precisa de métricas).
-- ✅ `test_batch_upsert_idempotence`: Ingestión doble de un lote completo comprobando duplicación cero.
-- ✅ `test_batch_upsert_partial_overlap_and_new_records`: Ingestión de lotes con intersecciones y registros nuevos.
-- ✅ `test_prepare_records_converts_types_and_handles_nan`: Normalización snake_case, tipos fecha y sustitución de `NaN` a `None` (SQL NULL).
-- ✅ `test_s3_read_silver_parquet_and_upsert_flow`: Integración end-to-end con bucket mock S3 (`moto`) y base de datos SQLite.
-- ✅ `test_get_latest_silver_key_selection`: Selección precisa del artefacto Parquet más reciente.
-
-Resultado esperado:
+Resultado de ejecución en entorno local:
 ```text
 ============================= test session starts =============================
-collected 42 items
+collected 54 items
 
-tests/test_extract.py .........                                          [ 21%]
-tests/test_load_postgres.py ...............                              [ 57%]
+tests/test_dag_integrity.py::TestDAGStaticStructure::test_dag_file_exists PASSED [  1%]
+tests/test_dag_integrity.py::TestDAGStaticStructure::test_dag_syntax_compilation PASSED [  3%]
+tests/test_dag_integrity.py::TestDAGStaticStructure::test_ast_contains_required_definitions PASSED [  5%]
+tests/test_dag_integrity.py::TestAirflowDAGIntegrity::* SKIPPED (ejecutado en CI/Docker)
+tests/test_extract.py .........                                          [ 37%]
+tests/test_load_postgres.py ...............                              [ 66%]
 tests/test_transform.py ..................                               [100%]
 
-============================= 42 passed in 11.36s =============================
+======================= 45 passed, 9 skipped in 28.77s ========================
 ```
 
 ---
 
-### 4. Ejecución del Pipeline Medallón de Extremo a Extremo
+## 🔄 Integración Continua (CI/CD con GitHub Actions)
 
-#### Paso A: Extracción e Ingestión a Bronce (Raw Layer)
-```bash
-python -m src.extract_s3
-```
+El workflow [.github/workflows/ci_pipeline.yml](.github/workflows/ci_pipeline.yml) valida automáticamente cada push y pull request en ramas principales:
 
-#### Paso B: Transformación y Carga a Plata (Silver Layer)
-```bash
-python -m src.transform
-```
-
-#### Paso C: Ingestión Idempotente a Oro (Gold Layer / PostgreSQL)
-```bash
-python -m src.load_postgres
-```
-
-Salida esperada de la Capa Oro:
-```text
-[2026-11-12 13:00:00] [INFO] [market_pipeline.load_postgres]: ==================================================
-[2026-11-12 13:00:00] [INFO] [market_pipeline.load_postgres]: 🚀 STARTING TECH MARKET GOLD INGESTION PIPELINE
-[2026-11-12 13:00:00] [INFO] [market_pipeline.load_postgres]: Target Tickers: ['NVDA', 'TSM', 'MSFT']
-[2026-11-12 13:00:00] [INFO] [market_pipeline.load_postgres]: Target Table: market_daily_metrics
-[2026-11-12 13:00:00] [INFO] [market_pipeline.load_postgres]: ==================================================
-[2026-11-12 13:00:01] [INFO] [market_pipeline.load_postgres]: Discovered latest Silver Parquet for ticker 'NVDA': silver/market_data/ticker=NVDA/...parquet
-[2026-11-12 13:00:01] [INFO] [market_pipeline.load_postgres]: Successfully read 22 records from s3://...
-[2026-11-12 13:00:01] [INFO] [market_pipeline.load_postgres]: Executing idempotent upsert of 22 records (Dialect: postgresql)...
-[2026-11-12 13:00:01] [INFO] [market_pipeline.load_postgres]: Successfully upserted 22 records into 'market_daily_metrics'.
-
-Gold Layer Ingestion Report:
-----------------------------
-✅ NVDA: 22 records upserted from silver/market_data/ticker=NVDA/year=2026/month=11/NVDA_silver_...parquet
-✅ TSM: 22 records upserted from silver/market_data/ticker=TSM/year=2026/month=11/TSM_silver_...parquet
-✅ MSFT: 22 records upserted from silver/market_data/ticker=MSFT/year=2026/month=11/MSFT_silver_...parquet
-```
+1. Levanta un runner en Ubuntu con Python 3.11.
+2. Instala dependencias y fija Apache Airflow con su archivo de restricciones oficial:
+   ```bash
+   pip install "apache-airflow==2.8.2" --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.8.2/constraints-3.11.txt"
+   pip install -r requirements.txt
+   ```
+3. Ejecuta `airflow db migrate` para inicializar el metastore temporal en `/tmp/airflow`.
+4. Ejecuta `pytest tests/ -v --tb=short` con credenciales mock de AWS (`mock_key`, `mock_secret`) y emulación S3 (`moto`).
 
 ---
 
@@ -383,8 +502,14 @@ LIMIT 10;
   - Cálculo de indicadores técnicos: SMA-7, SMA-30 y Retorno Diario.
   - Almacenamiento curado en Parquet particionado en S3 Silver.
 - [x] **Fase 3: Capa Oro (Gold / Analytics Layer - PostgreSQL)**
-  - Modelo ORM `MarketDailyMetrics` con SQLAlchemy 2.x e indexación B-Tree de series temporales.
+  - Modelo ORM `MarketDailyMetrics` con SQLAlchemy e indexación B-Tree de series temporales.
   - Lógica de Upsert idempotente (`INSERT ... ON CONFLICT (ticker, date) DO UPDATE`).
   - Suite de 15 pruebas de integración con base de datos SQLite en memoria y simulación S3.
-- [ ] **Fase 4: Orquestación con Apache Airflow**: DAG diario (`finance_etl_dag.py`) en Docker Compose con dependencias secuenciales Bronce ➔ Plata ➔ Oro y alertas.
-- [ ] **Fase 5: CI/CD y Visualización**: Automatización con GitHub Actions y Dashboard interactivo en Streamlit / API en FastAPI.
+- [x] **Fase 4: Orquestación con Apache Airflow (Workflow Management)**
+  - DAG `tech_market_etl_pipeline` programado a las 18:00 UTC (L-V) tras el cierre de mercado (`0 18 * * 1-5`).
+  - Pipeline secuencial Medallón: `extract_bronze_task >> transform_silver_task >> load_gold_task`.
+  - Configuración productiva con `LocalExecutor`, PostgreSQL metadata store y Docker Compose.
+  - Mitigación de conflictos binarios (`pyarrow<17.0.0`, `numpy<2.0.0`) y volumen para logs persistentes.
+  - Suite de pruebas de integridad del DAG con `DagBag`, análisis AST y comprobación de aciclicidad (`check_cycle`).
+  - Pipeline de CI/CD en GitHub Actions con `airflow db migrate` y ejecución de Pytest.
+- [ ] **Fase 5: Visualización y Consumo**: Dashboard analítico interactivo con Streamlit y endpoints REST con FastAPI.
