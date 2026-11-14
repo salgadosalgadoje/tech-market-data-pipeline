@@ -30,16 +30,17 @@ jobs:
       - name: Execute Pytest Suite (with Moto AWS Mocks & Airflow DAG Integrity)
         env:
           PYTHONPATH: .
-          AIRFLOW_HOME: ${{ github.workspace }}/airflow_home
+          AIRFLOW_HOME: /tmp/airflow
           AIRFLOW__CORE__LOAD_EXAMPLES: "False"
           AIRFLOW__CORE__UNIT_TEST_MODE: "True"
-          AWS_ACCESS_KEY_ID: testing_access_key
-          AWS_SECRET_ACCESS_KEY: testing_secret_key
-          AWS_SECURITY_TOKEN: testing_security_token
-          AWS_SESSION_TOKEN: testing_session_token
+          AWS_ACCESS_KEY_ID: mock_key
+          AWS_SECRET_ACCESS_KEY: mock_secret
+          AWS_SECURITY_TOKEN: mock_token
+          AWS_SESSION_TOKEN: mock_token
           AWS_DEFAULT_REGION: us-east-1
           S3_BUCKET_NAME: ci-mock-bucket
           S3_BRONZE_PREFIX: bronze/market_data
           S3_SILVER_PREFIX: silver/market_data
         run: |
+          airflow db migrate
           python -m pytest tests/ -v --tb=short
