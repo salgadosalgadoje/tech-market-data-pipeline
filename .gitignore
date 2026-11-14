@@ -49,3 +49,9 @@ htmlcov/
 *.csv
 data/
 raw_data/
+
+# Airflow logs
+logs/*
+!logs/.gitkeep
+airflow_home/
+

@@ -3,7 +3,7 @@
 yfinance>=0.2.36
 boto3>=1.34.0
 botocore>=1.34.0
-pandas>=2.2.0
+pandas>=2.1.0
 pyarrow>=15.0.0
 fastparquet>=2024.2.0
 
@@ -12,8 +12,11 @@ pydantic>=2.6.0
 python-dotenv>=1.0.0
 
 # Database & ORM (Gold Layer)
-sqlalchemy>=2.0.0
+sqlalchemy>=1.4.36
 psycopg2-binary>=2.9.9
+
+# Orchestration (Airflow DAG)
+apache-airflow>=2.8.0,<3.0.0
 
 # Testing & Mocking
 pytest>=8.0.0
