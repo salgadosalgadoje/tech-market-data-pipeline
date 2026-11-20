@@ -6,21 +6,21 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)
 ![AWS S3](https://img.shields.io/badge/AWS-S3%20Data%20Lake-FF9900?logo=amazons3)
 
-Un Data Pipeline financiero de nivel empresarial diseñado con **Arquitectura Medallón (Bronze ➔ Silver ➔ Gold)**, almacenamiento inmutable en **AWS S3 Data Lake**, validación de esquemas con **Pydantic V2**, enriquecimiento analítico con **Pandas**, persistencia relacional optimizada e idempotente en **PostgreSQL (SQLAlchemy)**, orquestación productiva con **Apache Airflow (LocalExecutor en Docker)** y suite de pruebas automatizadas con **Pytest / Moto / SQLite / DagBag**.
+An enterprise-grade financial data pipeline engineered with **Medallion Architecture (Bronze ➔ Silver ➔ Gold)**, immutable cloud storage in an **AWS S3 Data Lake**, strict schema validation and data contracts with **Pydantic V2**, quantitative feature engineering with **Pandas**, optimized and idempotent relational persistence in **PostgreSQL (SQLAlchemy)**, production-grade scheduled orchestration with **Apache Airflow (LocalExecutor on Docker)**, an automated test suite with **Pytest / Moto / SQLite / DagBag**, and an analytical consumption layer powered by **FastAPI** and **Streamlit**.
 
 ---
 
-## 🏛️ Arquitectura del Sistema
+## 🏛️ System Architecture
 
 ```mermaid
 flowchart LR
-    A["Yahoo Finance API<br/>yfinance"] -->|"Fase 1: Extracción Raw"| B[("AWS S3 - Capa Bronce<br/>Parquet Particionado")]
-    B -->|"Fase 2: Pydantic V2 + Pandas"| C[("AWS S3 - Capa Plata<br/>SMA-7, SMA-30, Retorno, Volatilidad")]
-    C -->|"Fase 3: SQLAlchemy Upsert"| D[("PostgreSQL 16 - Capa Oro<br/>market_daily_metrics")]
-    D -->|"Consumo Analítico"| E["Streamlit / FastAPI"]
+    A["Yahoo Finance API<br/>yfinance"] -->|"Phase 1: Raw Ingestion"| B[("AWS S3 - Bronze Layer<br/>Partitioned Parquet")]
+    B -->|"Phase 2: Pydantic V2 + Pandas"| C[("AWS S3 - Silver Layer<br/>SMA-7, SMA-30, Returns, Volatility")]
+    C -->|"Phase 3: SQLAlchemy Upsert"| D[("PostgreSQL 16 - Gold Layer<br/>market_daily_metrics")]
+    D -->|"Analytical Consumption"| E["Streamlit / FastAPI"]
 
-    subgraph Orquestación y Calidad
-        F["Apache Airflow 2.8.2<br/>LocalExecutor en Docker"] -.->|"0 18 * * 1-5"| A
+    subgraph Orchestration and Quality
+        F["Apache Airflow 2.8.2<br/>LocalExecutor on Docker"] -.->|"0 18 * * 1-5"| A
         F -.-> B
         F -.-> C
         G["GitHub Actions CI/CD<br/>Pytest + Moto + DagBag"]
@@ -29,152 +29,151 @@ flowchart LR
 
 ---
 
-## 📂 Estructura del Repositorio
+## 📂 Repository Structure
 
 ```text
 tech-market-data-pipeline/
 │
 ├── .github/
 │   └── workflows/
-│       └── ci_pipeline.yml        # CI/CD: Pipeline automatizado en GitHub Actions (Pytest + Airflow)
+│       └── ci_pipeline.yml        # CI/CD: Automated GitHub Actions pipeline (Pytest + Airflow)
 │
-├── dags/                          # Grafos Acíclicos Dirigidos (DAGs) de Apache Airflow
-│   └── finance_etl_dag.py         # [Fase 4] DAG de orquestación diaria Medallón (Bronze -> Silver -> Gold)
+├── dags/                          # Apache Airflow Directed Acyclic Graphs (DAGs)
+│   └── finance_etl_dag.py         # [Phase 4] Daily Medallion orchestration DAG (Bronze -> Silver -> Gold)
 │
-├── logs/                          # Logs de ejecución de Apache Airflow (volumen montado)
+├── logs/                          # Apache Airflow execution logs (mounted volume)
 │   └── .gitkeep
 │
-├── src/                           # Código fuente del pipeline ETL Medallion
+├── src/                           # Medallion ETL pipeline source code
 │   ├── __init__.py
-│   ├── extract_s3.py              # [Fase 1] Extracción y carga a AWS S3 (Bronze Layer)
-│   ├── transform.py               # [Fase 2] Validación Pydantic y cálculo de indicadores (Silver Layer)
-│   ├── load_postgres.py           # [Fase 3] Modelo ORM, lectura S3 y Upsert en PostgreSQL (Gold Layer)
-│   ├── api/                       # [Fase 5] Capa de Consumo Analítico REST (FastAPI)
+│   ├── extract_s3.py              # [Phase 1] Market extraction & raw upload to AWS S3 (Bronze Layer)
+│   ├── transform.py               # [Phase 2] Pydantic validation & indicator calculations (Silver Layer)
+│   ├── load_postgres.py           # [Phase 3] ORM model, S3 reader & idempotent Upsert (Gold Layer)
+│   ├── api/                       # [Phase 5] REST Analytical Consumption Layer (FastAPI)
 │   │   ├── __init__.py
-│   │   ├── schemas.py             # Esquemas de respuesta Pydantic V2
-│   │   └── main.py                # Endpoints REST y Dependency Injection
-│   └── dashboard/                 # [Fase 5] Dashboard Interactivo (Streamlit)
+│   │   ├── schemas.py             # Strict Pydantic V2 response & request schemas
+│   │   └── main.py                # REST endpoints and Dependency Injection
+│   └── dashboard/                 # [Phase 5] Interactive Analytics Dashboard (Streamlit)
 │       ├── __init__.py
-│       └── app.py                 # Visualizaciones Plotly, KPIs y exportación CSV
+│       └── app.py                 # Plotly visual analytics, executive KPIs & CSV export
 │
-├── tests/                         # Suite de Pruebas Automatizadas (69 Items)
+├── tests/                         # Automated Test Suite (69 Test Items)
 │   ├── __init__.py
-│   ├── test_extract.py            # [Fase 1] Pruebas de extracción con mock_aws (Moto)
-│   ├── test_transform.py          # [Fase 2] Validación de esquemas, indicadores y transformaciones
-│   ├── test_load_postgres.py      # [Fase 3] Pruebas de integración con SQLite in-memory y Upsert
-│   ├── test_dag_integrity.py      # [Fase 4] Integridad estática AST, DagBag, aciclicidad y dependencias
-│   └── test_api.py                # [Fase 5] Pruebas unitarias de endpoints REST con TestClient y SQLite in-memory
+│   ├── test_extract.py            # [Phase 1] Raw extraction tests with mock_aws (Moto)
+│   ├── test_transform.py          # [Phase 2] Schema validation, indicators & transformation tests
+│   ├── test_load_postgres.py      # [Phase 3] Integration tests with SQLite in-memory & Upsert logic
+│   ├── test_dag_integrity.py      # [Phase 4] Static AST integrity, DagBag, acyclicity & dependencies
+│   └── test_api.py                # [Phase 5] REST endpoint unit tests with TestClient & SQLite in-memory
 │
-├── .env.example                   # Plantilla de credenciales y variables de entorno
-├── .gitignore                     # Protección de credenciales, logs y artefactos temporales
-├── docker-compose.yml             # Infraestructura Docker: PostgreSQL 16 + Airflow (Webserver, Scheduler, Init)
-├── pytest.ini                     # Configuración estandarizada para ejecución de Pytest
-├── requirements.txt               # Dependencias fijadas y compatibles de producción y testing
-└── README.md                      # Documentación técnica, arquitectónica y operativa
+├── .env.example                   # Environment variable template
+├── .gitignore                     # Credentials, logs, and build artifact exclusions
+├── docker-compose.yml             # Docker infrastructure: PostgreSQL 16 + Airflow + FastAPI + Streamlit
+├── pytest.ini                     # Standardized Pytest test runner configuration
+├── requirements.txt               # Pinned production and testing dependencies
+└── README.md                      # Comprehensive technical documentation
 ```
 
 ---
 
-## 🛠️ Fase 1: Extractor y Data Lake (Bronze Layer)
+## 🛠️ Phase 1: Raw Ingestion & Data Lake (Bronze Layer)
 
-En esta fase se implementa el motor de ingestión inmutable de mercado:
-1. **Extracción**: Descarga datos históricos diarios de activos tecnológicos de alta capitalización (`NVDA`, `TSM`, `MSFT`) mediante `yfinance`.
-2. **Validación Preliminar**: Comprobación de que el DataFrame no esté vacío y contenga las columnas esenciales (`Open`, `High`, `Low`, `Close`, `Volume`).
-3. **Almacenamiento en Data Lake**: Serialización en memoria a formato **Apache Parquet** comprimido y subida particionada estilo Hive:
+The Bronze layer implements an immutable market ingestion engine:
+1. **Extraction**: Downloads daily historical market data for high-market-cap technology equities (`NVDA`, `TSM`, `MSFT`) via `yfinance`.
+2. **Preliminary Validation**: Verifies that the incoming dataset is non-empty and contains essential trading fields (`Open`, `High`, `Low`, `Close`, `Volume`).
+3. **Data Lake Storage**: Serializes datasets in memory to compressed **Apache Parquet** format and uploads partitioned files following Hive-style partitioning:
    ```text
-   s3://<tu-bucket>/bronze/market_data/ticker=NVDA/year=2026/month=10/NVDA_20261025_203000.parquet
+   s3://<your-bucket>/bronze/market_data/ticker=NVDA/year=2026/month=10/NVDA_20261025_203000.parquet
    ```
-4. **Metadatos y Auditoría**: Inclusión de metadatos HTTP en el objeto S3 (`ticker`, `record_count`, `pipeline_stage=bronze_raw`, `ingestion_utc`).
-5. **Testing Aislado**: 9 pruebas con `moto[s3]` que emulan S3 sin requerir credenciales reales ni generar costos de nube.
+4. **Metadata & Audit Trail**: Attaches custom HTTP metadata to each S3 object (`ticker`, `record_count`, `pipeline_stage=bronze_raw`, `ingestion_utc`).
+5. **Isolated Testing**: Validated through unit tests using `moto[s3]` to simulate AWS S3 without cloud fees or live IAM credentials.
 
 ---
 
-## 🥈 Fase 2: Transformación, Calidad y Enriquecimiento (Silver Layer)
+## 🥈 Phase 2: Transformation, Quality & Feature Engineering (Silver Layer)
 
-La Capa Plata convierte datos crudos en datasets limpios, validados y analíticamente enriquecidos:
+The Silver layer converts raw payloads into cleaned, validated, and quantitatively enriched datasets:
 
-### 1. Validación de Calidad de Datos con Pydantic V2 (`MarketRecordSchema`)
-Garantiza la coherencia semántica de cada registro antes de permitir su paso a Silver:
-- **Precios Estrictamente Positivos**: `Open, High, Low, Close > 0` (`gt=0`).
-- **Coherencia de Rango de Precios**: Valida que `High >= Low` a nivel de registro.
-- **Volumen No Negativo**: `Volume >= 0` (`ge=0`).
-- **Integridad Temporal**: Rechazo de registros con **fechas futuras** (`Date <= today_utc`).
-- **Símbolo Ticker Válido**: `ticker` no puede ser vacío (`min_length=1`).
+### 1. Data Quality Validation with Pydantic V2 (`MarketRecordSchema`)
+Enforces strict semantic integrity on every financial record before permitting entry into Silver:
+- **Strictly Positive Prices**: `Open, High, Low, Close > 0` (`gt=0`).
+- **Trading Range Consistency**: Validates that `High >= Low` at the record level.
+- **Non-Negative Volume**: `Volume >= 0` (`ge=0`).
+- **Temporal Consistency**: Rejection of records with **future dates** (`Date <= today_utc`).
+- **Non-Empty Ticker Symbol**: `ticker` cannot be empty or whitespace (`min_length=1`).
 
-### 2. Limpieza e Imputación con Pandas
-- **Orden Cronológico**: Conversión del campo `Date` a tipo datetime y orden ascendente.
-- **Tratamiento de Nulos**: Imputación de valores faltantes mediante forward-fill (`ffill`) complementado con backward-fill (`bfill`) para casos iniciales, descartando filas residuales no recuperables.
+### 2. Cleaning and Imputation with Pandas
+- **Chronological Sorting**: Normalizes `Date` to calendar dates and sorts chronologically in ascending order.
+- **Null Imputation**: Forward-fill (`ffill`) complemented by backward-fill (`bfill`) for edge initial rows, discarding residual corrupted records.
 
-### 3. Ingeniería de Características e Indicadores Técnicos
-- **SMA-7 (Simple Moving Average 7 días)**: Media móvil calculada sobre el precio de cierre (`Close`) para capturar la tendencia de corto plazo:
+### 3. Quantitative Feature Engineering & Technical Indicators
+- **SMA-7 (7-day Simple Moving Average)**: Short-term rolling moving average computed on the closing price (`Close`):
 
 $$\text{SMA}_{7} = \frac{1}{7} \sum_{i=0}^{6} \text{Close}_{t-i}$$
 
-- **SMA-30 (Simple Moving Average 30 días)**: Media móvil de medio plazo calculada sobre el precio de cierre:
+- **SMA-30 (30-day Simple Moving Average)**: Intermediate-term rolling moving average computed on the closing price:
 
 $$\text{SMA}_{30} = \frac{1}{30} \sum_{i=0}^{29} \text{Close}_{t-i}$$
 
-- **Retorno Diario (Daily Return)**: Variación porcentual diaria del precio de cierre. El día base inicial se imputa a 0.0 para evitar valores nulos al inicio de la serie temporal:
+- **Daily Return**: Daily percentage change in closing price. Baseline record initialized to 0.0 to prevent null artifacts:
 
-$$\text{Retorno}_{t} = \frac{\text{Close}_{t} - \text{Close}_{t-1}}{\text{Close}_{t-1}}$$
+$$\text{Return}_{t} = \frac{\text{Close}_{t} - \text{Close}_{t-1}}{\text{Close}_{t-1}}$$
 
-- **Volatilidad Móvil 7 Sesiones (Volatility 7)**: Desviación estándar móvil de los retornos diarios con `min_periods=1` y `.fillna(0.0)` para garantizar estabilidad numérica sin generar nulos en el día inicial:
+- **7-Session Rolling Volatility**: Rolling standard deviation of daily returns computed with `min_periods=1` and `.fillna(0.0)` for numerical stability:
 
-$$\text{Volatilidad}_{7} = \sqrt{\frac{1}{N-1} \sum_{i=0}^{6} (\text{Retorno}_{t-i} - \overline{\text{Retorno}})^2}$$
+$$\text{Volatility}_{7} = \sqrt{\frac{1}{N-1} \sum_{i=0}^{6} (\text{Return}_{t-i} - \overline{\text{Return}})^2}$$
 
-### 4. Almacenamiento Curado en S3 Silver
-Los datos enriquecidos se serializan como Parquet y se almacenan bajo la estructura particionada:
+### 4. Curated Parquet Storage in S3 Silver
+Enriched datasets are serialized as snappy-compressed Parquet files and partitioned by ticker:
 ```text
-s3://<tu-bucket>/silver/market_data/ticker=NVDA/year=2026/month=10/NVDA_silver_20261025_204500.parquet
+s3://<your-bucket>/silver/market_data/ticker=NVDA/year=2026/month=10/NVDA_silver_20261025_204500.parquet
 ```
 
 ---
 
-## 🥇 Fase 3: Capa Oro / Analytics Layer (PostgreSQL Warehouse)
+## 🥇 Phase 3: Gold Layer / Data Warehouse (PostgreSQL Ingestion)
 
-La **Capa Oro** materializa los datos curados en una base de datos relacional de alto rendimiento, optimizada para analistas cuantitativos, dashboards en tiempo real (Streamlit) y APIs analíticas (FastAPI).
+The **Gold Layer** materializes curated financial metrics into a relational data warehouse optimized for quantitative queries, real-time dashboards (Streamlit), and analytical REST endpoints (FastAPI).
 
-### 1. Modelo de Datos Relacional (`market_daily_metrics`)
+### 1. Relational Data Model (`market_daily_metrics`)
 
-El esquema de la tabla modela series temporales financieras con precisión atómica y tipos de datos normalizados:
+The table models financial time series with atomic precision and normalized types:
 
-| Columna | Tipo SQL | Restricción / Propiedad | Descripción |
+| Column | SQL Type | Constraint / Property | Description |
 | :--- | :--- | :--- | :--- |
-| `ticker` | `VARCHAR(10)` | **PRIMARY KEY** (Compuesta) | Símbolo bursátil del activo (ej. `NVDA`, `TSM`, `MSFT`) |
-| `date` | `DATE` | **PRIMARY KEY** (Compuesta) | Fecha de la jornada bursátil (`YYYY-MM-DD`) |
-| `open` | `FLOAT` | `NOT NULL` | Precio de apertura en USD |
-| `high` | `FLOAT` | `NOT NULL` | Precio máximo operado en el día en USD |
-| `low` | `FLOAT` | `NOT NULL` | Precio mínimo operado en el día en USD |
-| `close` | `FLOAT` | `NOT NULL` | Precio de cierre oficial en USD |
-| `volume` | `BIGINT` | `NOT NULL` | Volumen total de acciones negociadas |
-| `sma_7` | `FLOAT` | `NULLABLE` | Media Móvil Simple de 7 sesiones |
-| `sma_30` | `FLOAT` | `NULLABLE` | Media Móvil Simple de 30 sesiones |
-| `daily_return` | `FLOAT` | `NULLABLE` | Retorno porcentual respecto al cierre previo |
-| `volatility_7` | `FLOAT` | `NULLABLE` | Volatilidad móvil de 7 sesiones (desviación estándar) |
-| `transformed_at_utc` | `TIMESTAMPTZ` | `NULLABLE` | Marca temporal de procesamiento en Capa Plata |
-| `loaded_at_utc` | `TIMESTAMPTZ` | `NOT NULL` | Marca temporal de ingestión en Capa Oro |
+| `ticker` | `VARCHAR(10)` | **PRIMARY KEY** (Composite) | Stock ticker symbol (e.g., `NVDA`, `TSM`, `MSFT`) |
+| `date` | `DATE` | **PRIMARY KEY** (Composite) | Trading calendar date (`YYYY-MM-DD`) |
+| `open` | `FLOAT` | `NOT NULL` | Opening session price in USD |
+| `high` | `FLOAT` | `NOT NULL` | Highest traded price during the session in USD |
+| `low` | `FLOAT` | `NOT NULL` | Lowest traded price during the session in USD |
+| `close` | `FLOAT` | `NOT NULL` | Official closing price in USD |
+| `volume` | `BIGINT` | `NOT NULL` | Total shares traded |
+| `sma_7` | `FLOAT` | `NULLABLE` | 7-day Simple Moving Average |
+| `sma_30` | `FLOAT` | `NULLABLE` | 30-day Simple Moving Average |
+| `daily_return` | `FLOAT` | `NULLABLE` | Daily percentage return relative to previous close |
+| `volatility_7` | `FLOAT` | `NULLABLE` | 7-day rolling historical volatility |
+| `transformed_at_utc` | `TIMESTAMPTZ` | `NULLABLE` | Silver transformation processing timestamp |
+| `loaded_at_utc` | `TIMESTAMPTZ` | `NOT NULL` | Gold ingestion timestamp |
 
-### 2. Estrategia de Indexación para Series Temporales
+### 2. Time-Series Indexing Strategy
 
-Se establecieron índices B-Tree específicos para maximizar el throughput en patrones de consulta analíticos:
+B-Tree indexes optimize query throughput across common analytical access patterns:
 
 ```python
 __table_args__ = (
     PrimaryKeyConstraint("ticker", "date", name="pk_market_daily_metrics"),
-    Index("ix_market_daily_metrics_ticker_date", "ticker", "date"),  # Queries por activo y ventana temporal
-    Index("ix_market_daily_metrics_date", "date"),                  # Agregaciones transversales de mercado
-    Index("ix_market_daily_metrics_ticker", "ticker"),              # Filtros agregados por símbolo
+    Index("ix_market_daily_metrics_ticker_date", "ticker", "date"),  # Asset and temporal range queries
+    Index("ix_market_daily_metrics_date", "date"),                  # Cross-sectional market aggregations
+    Index("ix_market_daily_metrics_ticker", "ticker"),              # Ticker-specific filtering
 )
 ```
 
-- **`ix_market_daily_metrics_ticker_date`**: Optimiza consultas típicas de visualización: `WHERE ticker = 'NVDA' AND date BETWEEN '2026-01-01' AND '2026-03-31'`.
-- **`ix_market_daily_metrics_date`**: Permite calcular correlaciones, retornos agregados y comparaciones inter-activo para una misma fecha bursátil.
+- **`ix_market_daily_metrics_ticker_date`**: Accelerates visualization queries: `WHERE ticker = 'NVDA' AND date BETWEEN '2026-01-01' AND '2026-03-31'`.
+- **`ix_market_daily_metrics_date`**: Powers cross-asset market return comparisons and cross-sectional volatility calculations.
 
-### 3. Carga Idempotente (Upsert Pattern)
+### 3. Idempotent Upsert Pattern
 
-En ingeniería de datos de producción, las fallas transitorias de red o las re-ejecuciones de tareas en Airflow pueden provocar duplicación de registros si se usa un simple `INSERT`. 
+In production pipelines, network retries or DAG re-executions can cause duplicate records if raw `INSERT` statements are used. The Gold Layer implements an **UPSERT** pattern:
 
-La Capa Oro implementa el patrón **UPSERT** mediante la cláusula nativa:
 ```sql
 INSERT INTO market_daily_metrics (ticker, date, open, high, low, close, volume, sma_7, sma_30, daily_return, volatility_7, transformed_at_utc, loaded_at_utc)
 VALUES (...)
@@ -193,29 +192,28 @@ DO UPDATE SET
     loaded_at_utc = EXCLUDED.loaded_at_utc;
 ```
 
-#### Ventajas Técnicas:
-- **Idempotencia Estricta**: Ejecutar el pipeline 1 vez o 100 veces sobre el mismo rango de fechas produce el mismo estado en la base de datos sin duplicar métricas financieras.
-- **Auto-corrección de Datos**: Si un dato histórico sufre un split o ajuste posterior en la Capa Plata, el Upsert actualiza automáticamente los registros existentes.
-- **Dialecto Polimórfico**: El loader detecta dinámicamente si corre sobre `PostgreSQL` (en producción) o `SQLite` (en CI y tests locales), utilizando `dialects.postgresql.insert` o `dialects.sqlite.insert` respectivamente.
+#### Technical Guarantees:
+- **Strict Idempotency**: Running the pipeline 1 or 100 times over the same date range leaves the database in an identical, deduplicated state.
+- **Data Self-Correction**: If upstream indicators are revised in Silver, the Upsert updates existing records in place.
+- **Polymorphic Dialects**: Dynamically uses `dialects.postgresql.insert` in production and `dialects.sqlite.insert` during CI/CD and unit testing.
 
 ---
 
-## ⏱️ Fase 4: Orquestación con Apache Airflow (Workflow Management)
+## ⏱️ Phase 4: Workflow Orchestration with Apache Airflow
 
-La Fase 4 integra las 3 capas en un flujo de trabajo continuo, programado y tolerante a fallos orquestado por **Apache Airflow 2.8.2**, desplegado en contenedores Docker y configurado con **`LocalExecutor`** respaldado por PostgreSQL.
+Phase 4 integrates the pipeline into an automated, fault-tolerant workflow managed by **Apache Airflow 2.8.2**, containerized via Docker and powered by **`LocalExecutor`** backed by PostgreSQL.
 
-### 1. Definición del DAG (`dags/finance_etl_dag.py`)
+### 1. DAG Definition (`dags/finance_etl_dag.py`)
 
-El DAG `tech_market_etl_pipeline` implementa un flujo acíclico estricto con las siguientes especificaciones operativas:
-
-- **Identificador**: `tech_market_etl_pipeline`
-- **Cadencia Cron**: `0 18 * * 1-5` (Lunes a viernes a las 18:00 UTC / 6:00 PM EST, asegurando la captura de datos oficiales post-cierre de Wall Street).
-- **Control de Ejecución**:
-  - `catchup=False`: Previene ejecuciones históricas masivas accidentales al registrar el DAG por primera vez.
-  - `max_active_runs=1`: Evita que ejecuciones consecutivas compitan por los mismos prefijos de S3 o bloqueen transacciones de base de datos.
-- **Política de Reintentos (SLA & Resilience)**:
-  - `retries=2`: Ante caídas transitorias de API o saturación de red en S3.
-  - `retry_delay=timedelta(minutes=5)`: Espera progresiva antes de disparar el reintento.
+The DAG `tech_market_etl_pipeline` executes with the following operational specifications:
+- **DAG ID**: `tech_market_etl_pipeline`
+- **Schedule**: `0 18 * * 1-5` (Monday through Friday at 18:00 UTC / 6:00 PM EST, capturing official post-market closes).
+- **Execution Policy**:
+  - `catchup=False`: Prevents accidental historical execution floods.
+  - `max_active_runs=1`: Avoids concurrent runs competing for the same S3 prefixes.
+- **SLA & Retry Policy**:
+  - `retries=2`: Recovers from transient network or rate-limiting glitches.
+  - `retry_delay=timedelta(minutes=5)`: Progressive backoff between attempts.
 
 ```python
 default_args = {
@@ -240,98 +238,34 @@ with DAG(
     extract_bronze_task >> transform_silver_task >> load_gold_task
 ```
 
-### 2. Dependencias y Tareas Secuenciales
-
-Las tareas utilizan el operador `PythonOperator` e invocan limpiamente los módulos principales del paquete `src`:
+### 2. Task Dependencies & Pipeline Execution
 
 ```
    ┌───────────────────────┐
-   │  extract_bronze_task  │ ──► Ingestión Raw (yfinance ➔ S3 Bronze Parquet)
+   │  extract_bronze_task  │ ──► Raw Ingestion (yfinance ➔ S3 Bronze Parquet)
    └──────────┬────────────┘
               │
               ▼
    ┌───────────────────────┐
-   │ transform_silver_task │ ──► Validación Pydantic V2 + Limpieza + Indicadores (S3 Silver)
+   │ transform_silver_task │ ──► Pydantic V2 Validation + Cleaning + Indicators (S3 Silver)
    └──────────┬────────────┘
               │
               ▼
    ┌───────────────────────┐
-   │    load_gold_task     │ ──► Carga e Idempotent Upsert en PostgreSQL (Gold Warehouse)
+   │    load_gold_task     │ ──► Ingestion & Idempotent Upsert into PostgreSQL (Gold Warehouse)
    └───────────────────────┘
 ```
 
-- **Resolución Limpia de Rutas (`sys.path`)**:
-  El DAG resuelve dinámicamente `PROJECT_ROOT` y `SRC_DIR` en tiempo de carga:
-  ```python
-  DAGS_DIR = Path(__file__).resolve().parent
-  PROJECT_ROOT = DAGS_DIR.parent
-  SRC_DIR = PROJECT_ROOT / "src"
-
-  for path in (PROJECT_ROOT, SRC_DIR):
-      if str(path) not in sys.path:
-          sys.path.insert(0, str(path))
-  ```
-  Esto garantiza que tanto el Webserver como el Scheduler resuelvan `from src.extract_s3 import ...` sin requerir modificaciones manuales al entorno de ejecución.
-
-- **Manejo Robusto de Excepciones**:
-  Cada tarea valida el resultado devuelto (`summary["status"]`). Si se reporta `FAILURE` o `PARTIAL_FAILURE`, se eleva un `RuntimeError`, permitiendo que el motor de Airflow detecte el fallo y active su política de reintentos con métricas claras en los logs.
-
-### 3. Infraestructura Docker Compose (`docker-compose.yml`)
-
-La arquitectura de contenedores desacopla la persistencia de datos y el motor de orquestación utilizando anclas YAML (`x-airflow-common`):
-
-1. **LocalExecutor Productivo**:
-   Se evita el uso del `SequentialExecutor` (mono-hilo y basado en SQLite) en favor de `LocalExecutor` respaldado por PostgreSQL:
-   ```yaml
-   AIRFLOW__CORE__EXECUTOR: LocalExecutor
-   AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-   ```
-2. **Aislamiento de Red y Host de Base de Datos**:
-   - `env_file: [ .env ]` hereda automáticamente las credenciales de AWS, tickers y parámetros generales.
-   - **Sobrescritura Crítica de Red**: Se fuerza `POSTGRES_HOST: postgres` en la configuración de Airflow para que resuelva el contenedor de la base de datos dentro de la red `tech_market_net`, evitando que intente conectarse al `localhost` del host.
-3. **Volúmenes Persistentes**:
-   - `./dags:/opt/airflow/dags`: Sincronización en vivo de los DAGs.
-   - `./src:/opt/airflow/src`: Código fuente del pipeline ETL.
-   - `./logs:/opt/airflow/logs`: Logs estructurados de tareas.
-   - `postgres_data:/var/lib/postgresql/data`: Almacenamiento persistente de datos.
-4. **Fijación de Compatibilidad Binaria**:
-   Se asegura la compatibilidad entre paquetes en `_PIP_ADDITIONAL_REQUIREMENTS`:
-   ```yaml
-   _PIP_ADDITIONAL_REQUIREMENTS: "yfinance>=0.2.36 boto3>=1.34.0 pandas>=2.1.4 pydantic>=2.6.0 fastparquet>=2024.2.0 pyarrow<17.0.0 numpy<2.0.0"
-   ```
-   *(Las restricciones `pyarrow<17.0.0` y `numpy<2.0.0` previenen conflictos de extensiones C entre NumPy 2.x y PyArrow en entornos recreados).*
-5. **Servicio `airflow-init`**:
-   Ejecuta automáticamente las migraciones (`airflow db migrate`) y provisiona el usuario administrador (`admin` / `admin`) con validación de salud (`service_healthy`) de PostgreSQL.
-6. **Airflow Webserver**:
-   Expone el dashboard interactivo de monitoreo en el puerto `8080` con healthcheck automático sobre `/health`.
-
-### 4. Pruebas de Integridad del DAG (`tests/test_dag_integrity.py`)
-
-Se implementó una suite automatizada de pruebas con `pytest` estructurada en dos niveles:
-
-1. **Validación Estática de AST (`TestDAGStaticStructure`)**:
-   - Analiza el árbol sintáctico abstracto (AST) del DAG sin necesidad de tener Airflow instalado en el entorno anfitrión.
-   - Valida compilación sin errores, presencia del identificador `tech_market_etl_pipeline`, la cadencia `0 18 * * 1-5`, las tres tareas y el operador de encadenamiento `>>`.
-2. **Integridad Dinámica con `DagBag` (`TestAirflowDAGIntegrity`)**:
-   - `test_dagbag_no_import_errors`: Confirma que `len(dagbag.import_errors) == 0`.
-   - `test_dag_loaded_successfully`: Verifica que el DAG esté registrado.
-   - `test_dag_no_cycles`: Ejecuta `check_cycle(dag)` para garantizar que no existan ciclos infinitos o bloqueos mutuos.
-   - `test_dag_configuration_and_retries`: Valida schedule, `catchup=False`, `max_active_runs=1` y reintentos (`retries=2`, `retry_delay=timedelta(minutes=5)`).
-   - `test_dag_has_exact_expected_tasks`: Comprueba la existencia exacta de las 3 tareas esperadas.
-   - `test_dag_sequential_dependencies`: Valida rigurosamente la secuencia:
-     - `extract_bronze_task` ➔ Upstream: `{}`, Downstream: `{"transform_silver_task"}`
-     - `transform_silver_task` ➔ Upstream: `{"extract_bronze_task"}`, Downstream: `{"load_gold_task"}`
-     - `load_gold_task` ➔ Upstream: `{"transform_silver_task"}`, Downstream: `{}`
-3. **Manejo de Excepciones (`TestTaskExecutionLogic`)**:
-   - Simula escenarios de falla en las capas y comprueba que las funciones ejecutoras lancen `RuntimeError` para activar los reintentos de Airflow.
+- **Dynamic Module Resolution (`sys.path`)**: Resolves `PROJECT_ROOT` and `SRC_DIR` at DAG load time, ensuring reliable imports in Docker.
+- **Exception Propagation**: Validates return states (`summary["status"]`). Raises `RuntimeError` upon failure to trigger Airflow's native retry policies.
 
 ---
 
-## 📈 Fase 5: Capa de Consumo Analítico (FastAPI REST API & Streamlit Dashboard)
+## 📈 Phase 5: Analytical Consumption Layer (FastAPI REST API & Streamlit Dashboard)
 
-La **Fase 5** culmina la arquitectura Medallón proveyendo una interfaz de consumo analítico moderna, reactiva y desacoplada construida sobre la **Capa Oro (PostgreSQL)**:
-1. **API REST de Alto Desempeño (`src/api/main.py`)**: Microservicio en **FastAPI** con validación estricta de esquemas Pydantic V2, documentación interactiva OpenAPI/Swagger y manejo de errores HTTP.
-2. **Dashboard Ejecutivo Interactivo (`src/dashboard/app.py`)**: Interfaz visual en **Streamlit** con KPIs en tiempo real, gráficos financieros con **Plotly**, comparador multi-activo y exportación de datos.
+**Phase 5** establishes the analytical consumption layer connected directly to the **PostgreSQL Gold Layer**:
+1. **High-Performance REST API (`src/api/main.py`)**: Built with **FastAPI**, featuring strict Pydantic V2 schemas, interactive Swagger/OpenAPI documentation, and dependency injection.
+2. **Executive Analytics Dashboard (`src/dashboard/app.py`)**: Interactive **Streamlit** user interface with real-time KPI metrics, **Plotly** financial charts, multi-asset comparative analysis, and CSV data export.
 
 ```mermaid
 flowchart TD
@@ -341,60 +275,60 @@ flowchart TD
 
     subgraph Consumption Layer
         API["FastAPI REST API<br/>:8000<br/>• /health<br/>• /api/v1/tickers<br/>• /api/v1/metrics/{ticker}<br/>• /api/v1/metrics/{ticker}/latest<br/>• /api/v1/summary"]
-        DASH["Streamlit Dashboard<br/>:8501<br/>• Tarjetas KPI (Cierre, Retorno, Volatilidad)<br/>• Velas OHLC & SMA-7 / SMA-30<br/>• Volumen y Volatilidad 7d<br/>• Normalización Base 100"]
+        DASH["Streamlit Dashboard<br/>:8501<br/>• KPI Cards (Close, Return, Volatility)<br/>• OHLC Candlestick & SMA-7 / SMA-30<br/>• Volume & 7d Volatility Dynamics<br/>• Base 100 Relative Comparison"]
     end
 
     DB -->|"SQLAlchemy Session<br/>Depends(get_db)"| API
     DB -->|"SQLAlchemy Engine<br/>@st.cache_data"| DASH
-    API -.->|"OpenAPI JSON / Docs"| CONSUMER["Sistemas Downstream / BI / Usuarios"]
+    API -.->|"OpenAPI JSON / Docs"| CONSUMER["Downstream Systems / BI / Analysts"]
 ```
 
-### 1. Endpoints de la API REST (FastAPI)
+### 1. REST API Endpoints (FastAPI)
 
-La API expone endpoints REST estructurados con inyección de dependencias (`Depends(get_db)`), reutilizando el modelo ORM `MarketDailyMetrics` y `PostgresLoaderConfig`:
+All endpoints utilize dependency injection (`Depends(get_db)`), reusing `MarketDailyMetrics` and `PostgresLoaderConfig`:
 
-| Método | Endpoint | Parámetros Query | Códigos HTTP | Descripción |
+| Method | Endpoint | Query Parameters | HTTP Status | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/health` | Ninguno | `200`, `500` | Sonda de salud y verificación activa de conexión con PostgreSQL (`SELECT 1`). |
-| `GET` | `/api/v1/tickers` | Ninguno | `200`, `500` | Lista alfabética de todos los tickers con registros en la Capa Oro. |
-| `GET` | `/api/v1/metrics/{ticker}` | `start_date`, `end_date`, `limit` | `200`, `404`, `500` | Serie temporal cronológica (`date ASC`), filtrable por ventana de fechas y límite. |
-| `GET` | `/api/v1/metrics/{ticker}/latest` | Ninguno | `200`, `404`, `500` | Registro más reciente del activo con todos sus indicadores técnicos. |
-| `GET` | `/api/v1/summary` | Ninguno | `200`, `500` | Resumen transversal comparativo (cierre, retorno, volatilidad promedio 7d, volumen). |
+| `GET` | `/health` | None | `200`, `500` | Health check probe and live PostgreSQL connectivity verification (`SELECT 1`). |
+| `GET` | `/api/v1/tickers` | None | `200`, `500` | Alphabetical list of all equity tickers currently populated in the Gold Layer. |
+| `GET` | `/api/v1/metrics/{ticker}` | `start_date`, `end_date`, `limit` | `200`, `404`, `500` | Chronological time-series (`date ASC`), filterable by date range and record limit. |
+| `GET` | `/api/v1/metrics/{ticker}/latest` | None | `200`, `404`, `500` | Most recent trading session record including all technical indicators. |
+| `GET` | `/api/v1/summary` | None | `200`, `500` | Cross-sectional comparative summary (close, return, 7d average volatility, volume). |
 
-#### Esquemas Pydantic V2 (`src/api/schemas.py`)
-- `MarketMetricResponse`: Validación estricta con tipos atómicos, `model_config = ConfigDict(from_attributes=True)` y documentación de campos.
-- `TickerListResponse`: Catálogo de símbolos disponibles y conteo total.
-- `SummaryResponse` / `TickerSummaryItem`: Resumen financiero multidimensional.
-- `HealthResponse`: Monitoreo del estado del servicio y PostgreSQL.
-
----
-
-### 2. Dashboard Interactivo en Streamlit (`src/dashboard/app.py`)
-
-Interfaz de visualización ejecutiva optimizada para analistas financieros y toma de decisiones:
-- **Tarjetas KPI Superiores**: `st.metric` dinámicos con Último Precio de Cierre, Retorno Diario %, Volatilidad Móvil 7d % y Volumen transado.
-- **Gráfico Principal de Tendencia**: Selector interactivo entre gráfico lineal con medias móviles `SMA-7` (corto plazo) y `SMA-30` (medio plazo) o gráfico de velas japonesas (`OHLC Candlestick`).
-- **Análisis de Volumen y Riesgo**: Gráfico de barras de volumen diario coloreado por sesión positiva/negativa y gráfico de evolución de la volatilidad móvil 7d superpuesta al retorno.
-- **Comparativa Multi-Activo (Base 100)**: Normalización temporal para comparar retornos acumulados de diferentes activos a partir de una fecha base común.
-- **Resumen de Mercado y Exportación**: Tabla comparativa interactiva y botón de descarga de la serie filtrada en formato `.csv`.
-- **Tolerancia a Fallos**: Captura controlada de desconexión de base de datos (`SQLAlchemyError`) con mensajes amigables y botón de reconexión.
+#### Pydantic V2 Schemas (`src/api/schemas.py`)
+- `MarketMetricResponse`: Strict type modeling with `model_config = ConfigDict(from_attributes=True)` for seamless SQLAlchemy serialization.
+- `TickerListResponse`: Catalog of available symbols and total count.
+- `SummaryResponse` / `TickerSummaryItem`: Cross-asset financial aggregation schema.
+- `HealthResponse`: Service health status, database connectivity, and UTC timestamp.
 
 ---
 
-## ☁️ Guía de Configuración: AWS S3 y PostgreSQL
+### 2. Interactive Streamlit Dashboard (`src/dashboard/app.py`)
 
-### 1. Variables de Entorno (`.env`)
-Copia la plantilla `.env.example` y configura tus credenciales:
+Executive-grade interface tailored for financial analysts and decision-makers:
+- **Top KPI Cards**: Dynamic `st.metric` widgets tracking Latest Close, Daily Return %, 7d Rolling Volatility %, and Traded Volume.
+- **Main Trend Chart**: Interactive toggle between Line Chart with `SMA-7` / `SMA-30` overlays and `OHLC Candlestick` chart.
+- **Volume & Risk Profiling**: Daily traded volume bar chart (color-coded by positive/negative return) and dual-axis 7d rolling volatility vs. return.
+- **Multi-Asset Performance Comparison (Base 100)**: Normalized time-series performance comparison starting from a common base date.
+- **Market Summary Matrix & Export**: Full tabular summary across all tracked tickers with a dedicated `.csv` download button.
+- **Fault-Tolerant UI**: Graceful exception handling for database connectivity issues with actionable troubleshooting guidance and reconnect options.
+
+---
+
+## ☁️ Configuration Guide: AWS S3 & PostgreSQL
+
+### 1. Environment Variables (`.env`)
+Copy the provided `.env.example` file and configure your credentials:
 
 ```bash
 cp .env.example .env
 ```
 
-Parámetros clave:
+Key environment parameters:
 ```env
 # AWS S3 Data Lake
-AWS_ACCESS_KEY_ID=tu_access_key_aqui
-AWS_SECRET_ACCESS_KEY=tu_secret_key_aqui
+AWS_ACCESS_KEY_ID=your_access_key_here
+AWS_SECRET_ACCESS_KEY=your_secret_key_here
 AWS_DEFAULT_REGION=us-east-1
 S3_BUCKET_NAME=tech-market-bronze-jsalgado
 S3_BRONZE_PREFIX=bronze/market_data
@@ -405,113 +339,105 @@ TARGET_TICKERS=NVDA,TSM,MSFT
 EXTRACTION_PERIOD=1mo
 EXTRACTION_INTERVAL=1d
 
-# PostgreSQL / Capa Oro
+# PostgreSQL / Gold Layer
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=tu_password_seguro
+POSTGRES_PASSWORD=your_secure_password_here
 POSTGRES_DB=market_data
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
-DATABASE_URL=postgresql+psycopg2://postgres:tu_password_seguro@localhost:5432/market_data
+DATABASE_URL=postgresql+psycopg2://postgres:your_secure_password_here@localhost:5432/market_data
 ```
 
-> ⚠️ **IMPORTANTE**: Nunca compartas ni subas tu archivo `.env` a repositorios públicos. El archivo se encuentra excluido mediante `.gitignore`.
+> ⚠️ **IMPORTANT**: Never commit your `.env` file to source control. It is explicitly ignored via `.gitignore`.
 
 ---
 
-## 🐳 Despliegue Completo con Docker Compose
+## 🐳 Deployment with Docker Compose
 
-El archivo [`docker-compose.yml`](docker-compose.yml) orquesta la base de datos PostgreSQL 16 y el ecosistema completo de Apache Airflow:
+The [`docker-compose.yml`](docker-compose.yml) orchestrates PostgreSQL 16, Apache Airflow, and the analytical consumption layer:
 
 ```bash
-# 1. Iniciar toda la infraestructura en segundo plano
+# 1. Start core data infrastructure (PostgreSQL + Airflow) in the background
 docker-compose up -d
 
-# 2. Verificar el estado de los contenedores
+# 2. Check running container status
 docker-compose ps
 
-# 3. Inspeccionar logs del scheduler o webserver si se requiere
+# 3. View Airflow scheduler or webserver logs
 docker-compose logs -f airflow-scheduler
 
-# 4. (Opcional - Fase 5) Iniciar los servicios de Consumo Analítico (FastAPI + Streamlit):
+# 4. (Optional - Phase 5) Start the Analytical Consumption Layer (FastAPI + Streamlit):
 docker-compose --profile consumption up -d
 ```
 
-### URLs y Puertos de la Plataforma:
-- **Airflow Webserver**: [http://localhost:8080](http://localhost:8080) (Usuario: `admin`, Contraseña: `admin`)
+### Platform URLs & Default Ports:
+- **Airflow Webserver**: [http://localhost:8080](http://localhost:8080) (Username: `admin`, Password: `admin`)
 - **FastAPI REST API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Streamlit Analytics Dashboard**: [http://localhost:8501](http://localhost:8501)
 
-
-Desde la interfaz de usuario de Airflow, activa el switch del DAG `tech_market_etl_pipeline` o ejecútalo manualmente haciendo clic en **Trigger DAG**.
-
-Para ingresar a la consola interactiva de PostgreSQL:
+To access the interactive PostgreSQL shell:
 ```bash
 docker exec -it tech_market_postgres psql -U postgres -d market_data
 ```
 
-> 💡 **Nota sobre Base de Datos Existente**: Si ya contabas con un contenedor previo y deseas incorporar la columna `volatility_7` sin reiniciar el volumen persistente:
-> ```bash
-> docker exec -it tech_market_postgres psql -U postgres -d market_data -c "ALTER TABLE market_daily_metrics ADD COLUMN IF NOT EXISTS volatility_7 FLOAT;"
-> ```
-
 ---
 
-## 💻 Instalación y Ejecución Local
+## 💻 Local Installation & Execution
 
-### 1. Crear y Activar Entorno Virtual
+### 1. Create and Activate Virtual Environment
 ```bash
-# En Windows (PowerShell):
+# On Windows (PowerShell):
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
-# En Linux/macOS:
+# On Linux/macOS:
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### 2. Instalar Dependencias
+### 2. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Ejecutar la Capa de Consumo Analítico Localmente
+### 3. Run the Analytical Consumption Layer Locally
 
-#### A. Levantar la API REST con FastAPI:
-Inicia el servidor de desarrollo de FastAPI con hot-reloading:
+#### A. Start the FastAPI REST API:
+Starts the FastAPI server with hot-reloading:
 ```bash
 uvicorn src.api.main:app --reload
 ```
-- **Documentación Interactiva Swagger / OpenAPI**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Documentación Redoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
-- **Healthcheck & Conectividad**: [http://localhost:8000/health](http://localhost:8000/health)
+- **Interactive Swagger / OpenAPI Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Redoc Documentation**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+- **Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
 
-#### B. Levantar el Dashboard Interactivo con Streamlit:
-Lanza el dashboard analítico conectado a la Capa Oro:
+#### B. Start the Streamlit Analytics Dashboard:
+Launches the interactive dashboard connected to the Gold Layer:
 ```bash
 streamlit run src/dashboard/app.py
 ```
-- **URL de Acceso Local**: [http://localhost:8501](http://localhost:8501)
+- **Local Dashboard URL**: [http://localhost:8501](http://localhost:8501)
 
 ---
 
-### 4. Ejecutar la Suite de Pruebas Automatizadas
-La suite contiene **69 items de prueba** que garantizan la integridad de las 5 fases:
+### 4. Execute the Automated Test Suite
+The test suite contains **69 comprehensive test items** verifying all 5 pipeline phases:
 
 ```bash
-# Ejecutar todas las pruebas del repositorio (usando pytest.ini)
+# Run the entire test suite (using pytest.ini)
 pytest -v
 
-# Ejecutar las pruebas de la API REST (Fase 5 - FastAPI + SQLite in-memory)
+# Run the Analytical REST API tests (Phase 5 - FastAPI + SQLite in-memory)
 pytest tests/test_api.py -v
 
-# Ejecutar las pruebas de integridad del DAG de Airflow (Fase 4)
+# Run Airflow DAG static integrity tests (Phase 4)
 pytest tests/test_dag_integrity.py -v
 
-# Ejecutar las pruebas de la Capa Oro (Fase 3 - PostgreSQL Upsert)
+# Run Gold Layer tests (Phase 3 - PostgreSQL Upsert)
 pytest tests/test_load_postgres.py -v
 ```
 
-Resultado de ejecución en entorno local:
+Local test execution output:
 ```text
 ============================= test session starts =============================
 configfile: pytest.ini
@@ -520,7 +446,7 @@ collected 69 items
 
 tests/test_api.py ...............                                        [ 20%]
 tests/test_dag_integrity.py::TestDAGStaticStructure::* PASSED           [ 24%]
-tests/test_dag_integrity.py::TestAirflowDAGIntegrity::* SKIPPED (ejecutado en CI/Docker)
+tests/test_dag_integrity.py::TestAirflowDAGIntegrity::* SKIPPED (tested in CI/Docker)
 tests/test_extract.py .........                                          [ 50%]
 tests/test_load_postgres.py ...............                              [ 72%]
 tests/test_transform.py ....................                             [100%]
@@ -530,27 +456,27 @@ tests/test_transform.py ....................                             [100%]
 
 ---
 
-## 🔄 Integración Continua (CI/CD con GitHub Actions)
+## 🔄 Continuous Integration (CI/CD with GitHub Actions)
 
-El workflow [.github/workflows/ci_pipeline.yml](.github/workflows/ci_pipeline.yml) valida automáticamente cada push y pull request en ramas principales:
+The [.github/workflows/ci_pipeline.yml](.github/workflows/ci_pipeline.yml) workflow validates every push and pull request against primary branches:
 
-1. Levanta un runner en Ubuntu con Python 3.11.
-2. Instala dependencias y fija Apache Airflow con su archivo de restricciones oficial:
+1. Provisions an Ubuntu runner on Python 3.11.
+2. Installs dependencies and pins Apache Airflow using its official constraints file:
    ```bash
    pip install "apache-airflow==2.8.2" --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.8.2/constraints-3.11.txt"
    pip install -r requirements.txt
    ```
-3. Ejecuta `airflow db migrate` para inicializar el metastore temporal en `/tmp/airflow`.
-4. Ejecuta `pytest tests/ -v --tb=short` con credenciales mock de AWS (`mock_key`, `mock_secret`), emulación S3 (`moto`) y base de datos SQLite aislada para la API.
+3. Runs `airflow db migrate` to initialize a temporary metadata store at `/tmp/airflow`.
+4. Executes `pytest tests/ -v --tb=short` with mocked AWS credentials (`mock_key`, `mock_secret`), S3 emulation (`moto`), and an isolated in-memory SQLite database for FastAPI.
 
 ---
 
-## 📊 Verificación de Datos en PostgreSQL
+## 📊 Gold Layer Verification Queries
 
-Puedes conectarte a la base de datos y lanzar consultas analíticas para verificar la calidad de los datos cargados:
+You can connect directly to PostgreSQL and run analytical SQL queries:
 
 ```sql
--- Consultar las métricas financieras más recientes con sus indicadores técnicos y volatilidad
+-- Query the most recent market metrics and technical indicators
 SELECT 
     ticker,
     date,
@@ -568,8 +494,8 @@ LIMIT 10;
 
 ---
 
-## 🔮 Roadmap del Proyecto
+## 🔮 Project Roadmap
 
-- [x] **Fases 1–4**: Ingesta Bronze (AWS S3), Curación Silver (Pydantic V2 / Pandas), Warehouse Gold (PostgreSQL Upsert) y Orquestación Automatizada (Apache Airflow 2.8.2 + CI/CD en GitHub Actions).
-- [x] **Fase 5**: Capa de consumo analítico mediante dashboard interactivo en Streamlit y endpoints REST en FastAPI.
-- [ ] **Fase 6 (Producción Cloud)**: Despliegue continuo en AWS ECS / EC2 con base de datos administrada en AWS RDS y alertas de fallo vía Slack/Email.
+- [x] **Phases 1–4**: Bronze Ingestion (AWS S3), Silver Curation (Pydantic V2 / Pandas), Gold Warehouse (PostgreSQL Upsert), and Automated Orchestration (Apache Airflow 2.8.2 + CI/CD in GitHub Actions).
+- [x] **Phase 5**: Analytical Consumption Layer via interactive Streamlit dashboard and FastAPI REST endpoints.
+- [ ] **Phase 6 (Cloud Production)**: Continuous deployment on AWS ECS / EC2 with AWS RDS managed database and failure alerting via Slack/Email.
