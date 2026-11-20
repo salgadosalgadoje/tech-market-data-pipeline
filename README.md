@@ -315,6 +315,18 @@ Executive-grade interface tailored for financial analysts and decision-makers:
 
 ---
 
+### 3. Analytical Consumption Layer Preview
+
+#### Interactive Dashboard (Streamlit + Plotly)
+![Analytics Dashboard - KPIs and Trends](docs/dashboard_overview.png)
+
+![Multi-Asset Base 100 Comparison & Market Summary](docs/dashboard_comparison.png)
+
+#### Interactive REST API Documentation (FastAPI Swagger UI)
+![FastAPI Swagger UI](docs/api_swagger.png)
+
+---
+
 ## ☁️ Configuration Guide: AWS S3 & PostgreSQL
 
 ### 1. Environment Variables (`.env`)
