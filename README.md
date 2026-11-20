@@ -48,14 +48,22 @@ tech-market-data-pipeline/
 │   ├── __init__.py
 │   ├── extract_s3.py              # [Fase 1] Extracción y carga a AWS S3 (Bronze Layer)
 │   ├── transform.py               # [Fase 2] Validación Pydantic y cálculo de indicadores (Silver Layer)
-│   └── load_postgres.py           # [Fase 3] Modelo ORM, lectura S3 y Upsert en PostgreSQL (Gold Layer)
+│   ├── load_postgres.py           # [Fase 3] Modelo ORM, lectura S3 y Upsert en PostgreSQL (Gold Layer)
+│   ├── api/                       # [Fase 5] Capa de Consumo Analítico REST (FastAPI)
+│   │   ├── __init__.py
+│   │   ├── schemas.py             # Esquemas de respuesta Pydantic V2
+│   │   └── main.py                # Endpoints REST y Dependency Injection
+│   └── dashboard/                 # [Fase 5] Dashboard Interactivo (Streamlit)
+│       ├── __init__.py
+│       └── app.py                 # Visualizaciones Plotly, KPIs y exportación CSV
 │
-├── tests/                         # Suite de Pruebas Automatizadas (55 Items)
+├── tests/                         # Suite de Pruebas Automatizadas (69 Items)
 │   ├── __init__.py
 │   ├── test_extract.py            # [Fase 1] Pruebas de extracción con mock_aws (Moto)
 │   ├── test_transform.py          # [Fase 2] Validación de esquemas, indicadores y transformaciones
 │   ├── test_load_postgres.py      # [Fase 3] Pruebas de integración con SQLite in-memory y Upsert
-│   └── test_dag_integrity.py      # [Fase 4] Integridad estática AST, DagBag, aciclicidad y dependencias
+│   ├── test_dag_integrity.py      # [Fase 4] Integridad estática AST, DagBag, aciclicidad y dependencias
+│   └── test_api.py                # [Fase 5] Pruebas unitarias de endpoints REST con TestClient y SQLite in-memory
 │
 ├── .env.example                   # Plantilla de credenciales y variables de entorno
 ├── .gitignore                     # Protección de credenciales, logs y artefactos temporales
@@ -319,6 +327,60 @@ Se implementó una suite automatizada de pruebas con `pytest` estructurada en do
 
 ---
 
+## 📈 Fase 5: Capa de Consumo Analítico (FastAPI REST API & Streamlit Dashboard)
+
+La **Fase 5** culmina la arquitectura Medallón proveyendo una interfaz de consumo analítico moderna, reactiva y desacoplada construida sobre la **Capa Oro (PostgreSQL)**:
+1. **API REST de Alto Desempeño (`src/api/main.py`)**: Microservicio en **FastAPI** con validación estricta de esquemas Pydantic V2, documentación interactiva OpenAPI/Swagger y manejo de errores HTTP.
+2. **Dashboard Ejecutivo Interactivo (`src/dashboard/app.py`)**: Interfaz visual en **Streamlit** con KPIs en tiempo real, gráficos financieros con **Plotly**, comparador multi-activo y exportación de datos.
+
+```mermaid
+flowchart TD
+    subgraph Gold Layer
+        DB[("PostgreSQL 16<br/>market_daily_metrics")]
+    end
+
+    subgraph Consumption Layer
+        API["FastAPI REST API<br/>:8000<br/>• /health<br/>• /api/v1/tickers<br/>• /api/v1/metrics/{ticker}<br/>• /api/v1/metrics/{ticker}/latest<br/>• /api/v1/summary"]
+        DASH["Streamlit Dashboard<br/>:8501<br/>• Tarjetas KPI (Cierre, Retorno, Volatilidad)<br/>• Velas OHLC & SMA-7 / SMA-30<br/>• Volumen y Volatilidad 7d<br/>• Normalización Base 100"]
+    end
+
+    DB -->|"SQLAlchemy Session<br/>Depends(get_db)"| API
+    DB -->|"SQLAlchemy Engine<br/>@st.cache_data"| DASH
+    API -.->|"OpenAPI JSON / Docs"| CONSUMER["Sistemas Downstream / BI / Usuarios"]
+```
+
+### 1. Endpoints de la API REST (FastAPI)
+
+La API expone endpoints REST estructurados con inyección de dependencias (`Depends(get_db)`), reutilizando el modelo ORM `MarketDailyMetrics` y `PostgresLoaderConfig`:
+
+| Método | Endpoint | Parámetros Query | Códigos HTTP | Descripción |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/health` | Ninguno | `200`, `500` | Sonda de salud y verificación activa de conexión con PostgreSQL (`SELECT 1`). |
+| `GET` | `/api/v1/tickers` | Ninguno | `200`, `500` | Lista alfabética de todos los tickers con registros en la Capa Oro. |
+| `GET` | `/api/v1/metrics/{ticker}` | `start_date`, `end_date`, `limit` | `200`, `404`, `500` | Serie temporal cronológica (`date ASC`), filtrable por ventana de fechas y límite. |
+| `GET` | `/api/v1/metrics/{ticker}/latest` | Ninguno | `200`, `404`, `500` | Registro más reciente del activo con todos sus indicadores técnicos. |
+| `GET` | `/api/v1/summary` | Ninguno | `200`, `500` | Resumen transversal comparativo (cierre, retorno, volatilidad promedio 7d, volumen). |
+
+#### Esquemas Pydantic V2 (`src/api/schemas.py`)
+- `MarketMetricResponse`: Validación estricta con tipos atómicos, `model_config = ConfigDict(from_attributes=True)` y documentación de campos.
+- `TickerListResponse`: Catálogo de símbolos disponibles y conteo total.
+- `SummaryResponse` / `TickerSummaryItem`: Resumen financiero multidimensional.
+- `HealthResponse`: Monitoreo del estado del servicio y PostgreSQL.
+
+---
+
+### 2. Dashboard Interactivo en Streamlit (`src/dashboard/app.py`)
+
+Interfaz de visualización ejecutiva optimizada para analistas financieros y toma de decisiones:
+- **Tarjetas KPI Superiores**: `st.metric` dinámicos con Último Precio de Cierre, Retorno Diario %, Volatilidad Móvil 7d % y Volumen transado.
+- **Gráfico Principal de Tendencia**: Selector interactivo entre gráfico lineal con medias móviles `SMA-7` (corto plazo) y `SMA-30` (medio plazo) o gráfico de velas japonesas (`OHLC Candlestick`).
+- **Análisis de Volumen y Riesgo**: Gráfico de barras de volumen diario coloreado por sesión positiva/negativa y gráfico de evolución de la volatilidad móvil 7d superpuesta al retorno.
+- **Comparativa Multi-Activo (Base 100)**: Normalización temporal para comparar retornos acumulados de diferentes activos a partir de una fecha base común.
+- **Resumen de Mercado y Exportación**: Tabla comparativa interactiva y botón de descarga de la serie filtrada en formato `.csv`.
+- **Tolerancia a Fallos**: Captura controlada de desconexión de base de datos (`SQLAlchemyError`) con mensajes amigables y botón de reconexión.
+
+---
+
 ## ☁️ Guía de Configuración: AWS S3 y PostgreSQL
 
 ### 1. Variables de Entorno (`.env`)
@@ -369,12 +431,16 @@ docker-compose ps
 
 # 3. Inspeccionar logs del scheduler o webserver si se requiere
 docker-compose logs -f airflow-scheduler
+
+# 4. (Opcional - Fase 5) Iniciar los servicios de Consumo Analítico (FastAPI + Streamlit):
+docker-compose --profile consumption up -d
 ```
 
-### Acceso a la Interfaz Web de Airflow:
-- **URL**: [http://localhost:8080](http://localhost:8080)
-- **Usuario**: `admin`
-- **Contraseña**: `admin`
+### URLs y Puertos de la Plataforma:
+- **Airflow Webserver**: [http://localhost:8080](http://localhost:8080) (Usuario: `admin`, Contraseña: `admin`)
+- **FastAPI REST API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Streamlit Analytics Dashboard**: [http://localhost:8501](http://localhost:8501)
+
 
 Desde la interfaz de usuario de Airflow, activa el switch del DAG `tech_market_etl_pipeline` o ejecútalo manualmente haciendo clic en **Trigger DAG**.
 
@@ -408,17 +474,40 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Ejecutar la Suite de Pruebas Automatizadas
-La suite contiene **55 items de prueba** que garantizan la integridad de las 4 fases:
+### 3. Ejecutar la Capa de Consumo Analítico Localmente
+
+#### A. Levantar la API REST con FastAPI:
+Inicia el servidor de desarrollo de FastAPI con hot-reloading:
+```bash
+uvicorn src.api.main:app --reload
+```
+- **Documentación Interactiva Swagger / OpenAPI**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Documentación Redoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+- **Healthcheck & Conectividad**: [http://localhost:8000/health](http://localhost:8000/health)
+
+#### B. Levantar el Dashboard Interactivo con Streamlit:
+Lanza el dashboard analítico conectado a la Capa Oro:
+```bash
+streamlit run src/dashboard/app.py
+```
+- **URL de Acceso Local**: [http://localhost:8501](http://localhost:8501)
+
+---
+
+### 4. Ejecutar la Suite de Pruebas Automatizadas
+La suite contiene **69 items de prueba** que garantizan la integridad de las 5 fases:
 
 ```bash
 # Ejecutar todas las pruebas del repositorio (usando pytest.ini)
 pytest -v
 
-# Ejecutar las pruebas de integridad del DAG de Airflow
+# Ejecutar las pruebas de la API REST (Fase 5 - FastAPI + SQLite in-memory)
+pytest tests/test_api.py -v
+
+# Ejecutar las pruebas de integridad del DAG de Airflow (Fase 4)
 pytest tests/test_dag_integrity.py -v
 
-# Ejecutar las pruebas de la Capa Oro (PostgreSQL Upsert)
+# Ejecutar las pruebas de la Capa Oro (Fase 3 - PostgreSQL Upsert)
 pytest tests/test_load_postgres.py -v
 ```
 
@@ -427,17 +516,16 @@ Resultado de ejecución en entorno local:
 ============================= test session starts =============================
 configfile: pytest.ini
 testpaths: tests
-collected 55 items
+collected 69 items
 
-tests/test_dag_integrity.py::TestDAGStaticStructure::test_dag_file_exists PASSED [  1%]
-tests/test_dag_integrity.py::TestDAGStaticStructure::test_dag_syntax_compilation PASSED [  3%]
-tests/test_dag_integrity.py::TestDAGStaticStructure::test_ast_contains_required_definitions PASSED [  5%]
+tests/test_api.py ...............                                        [ 20%]
+tests/test_dag_integrity.py::TestDAGStaticStructure::* PASSED           [ 24%]
 tests/test_dag_integrity.py::TestAirflowDAGIntegrity::* SKIPPED (ejecutado en CI/Docker)
-tests/test_extract.py .........                                          [ 36%]
-tests/test_load_postgres.py ...............                              [ 65%]
+tests/test_extract.py .........                                          [ 50%]
+tests/test_load_postgres.py ...............                              [ 72%]
 tests/test_transform.py ....................                             [100%]
 
-======================== 46 passed, 9 skipped in 7.68s ========================
+======================== 60 passed, 9 skipped in 11.07s =======================
 ```
 
 ---
@@ -453,7 +541,7 @@ El workflow [.github/workflows/ci_pipeline.yml](.github/workflows/ci_pipeline.ym
    pip install -r requirements.txt
    ```
 3. Ejecuta `airflow db migrate` para inicializar el metastore temporal en `/tmp/airflow`.
-4. Ejecuta `pytest tests/ -v --tb=short` con credenciales mock de AWS (`mock_key`, `mock_secret`) y emulación S3 (`moto`).
+4. Ejecuta `pytest tests/ -v --tb=short` con credenciales mock de AWS (`mock_key`, `mock_secret`), emulación S3 (`moto`) y base de datos SQLite aislada para la API.
 
 ---
 
@@ -483,5 +571,5 @@ LIMIT 10;
 ## 🔮 Roadmap del Proyecto
 
 - [x] **Fases 1–4**: Ingesta Bronze (AWS S3), Curación Silver (Pydantic V2 / Pandas), Warehouse Gold (PostgreSQL Upsert) y Orquestación Automatizada (Apache Airflow 2.8.2 + CI/CD en GitHub Actions).
-- [ ] **Fase 5 (Próximo paso)**: Capa de consumo analítico mediante dashboard interactivo en Streamlit y endpoints REST en FastAPI.
+- [x] **Fase 5**: Capa de consumo analítico mediante dashboard interactivo en Streamlit y endpoints REST en FastAPI.
 - [ ] **Fase 6 (Producción Cloud)**: Despliegue continuo en AWS ECS / EC2 con base de datos administrada en AWS RDS y alertas de fallo vía Slack/Email.
