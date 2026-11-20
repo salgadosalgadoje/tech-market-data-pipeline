@@ -37,7 +37,7 @@ logger = logging.getLogger("market_pipeline.dashboard")
 
 # Streamlit Page Configuration
 st.set_page_config(
-    page_title="Tech Market Analytics | Capa Oro",
+    page_title="Tech Market Analytics | Gold Layer",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -150,12 +150,12 @@ def load_market_summary(_engine: Engine) -> pd.DataFrame:
             rows.append(
                 {
                     "Ticker": t,
-                    "Última Fecha": latest.date.strftime("%Y-%m-%d") if hasattr(latest.date, "strftime") else str(latest.date),
-                    "Cierre (USD)": round(float(latest.close), 2),
-                    "Retorno Diario (%)": round(float(latest.daily_return * 100), 2) if latest.daily_return is not None else 0.0,
-                    "Volatilidad 7d (%)": round(float(latest.volatility_7 * 100), 2) if latest.volatility_7 is not None else 0.0,
-                    "Volatilidad 7d Media (%)": round(float(avg_vol * 100), 2) if avg_vol is not None else 0.0,
-                    "Volumen (Acciones)": int(latest.volume),
+                    "Latest Date": latest.date.strftime("%Y-%m-%d") if hasattr(latest.date, "strftime") else str(latest.date),
+                    "Close (USD)": round(float(latest.close), 2),
+                    "Daily Return (%)": round(float(latest.daily_return * 100), 2) if latest.daily_return is not None else 0.0,
+                    "7d Volatility (%)": round(float(latest.volatility_7 * 100), 2) if latest.volatility_7 is not None else 0.0,
+                    "Avg 7d Volatility (%)": round(float(avg_vol * 100), 2) if avg_vol is not None else 0.0,
+                    "Volume (Shares)": int(latest.volume),
                     "SMA 7": round(float(latest.sma_7), 2) if latest.sma_7 is not None else None,
                     "SMA 30": round(float(latest.sma_30), 2) if latest.sma_30 is not None else None,
                 }
@@ -171,10 +171,10 @@ def load_market_summary(_engine: Engine) -> pd.DataFrame:
 def main() -> None:
     """Streamlit Application Entrypoint."""
     # Top Header
-    st.markdown('<div class="main-header">📈 Tech Market Data Pipeline — Dashboard Analítico</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">📈 Tech Market Data Pipeline — Analytics Dashboard</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="sub-header">Capa de Consumo Analítico (Fase 5) conectada a la <b>Capa Oro (PostgreSQL)</b>. '
-        'Monitoreo ejecutivo de precios, medias móviles, volatilidad y volúmenes bursátiles.</div>',
+        '<div class="sub-header">Analytical Consumption Layer (Phase 5) connected to the <b>Gold Layer (PostgreSQL)</b>. '
+        'Executive monitoring of equity prices, moving averages, rolling volatility, and market volumes.</div>',
         unsafe_allow_html=True,
     )
 
@@ -189,17 +189,17 @@ def main() -> None:
     if not connected:
         config = PostgresLoaderConfig()
         st.error(
-            "🚨 **Error de Conexión con PostgreSQL (Capa Oro)**\n\n"
-            f"No fue posible establecer conexión con la base de datos en `{config.db_host}:{config.db_port}/{config.db_name}`.\n\n"
-            "**Diagnóstico y Solución:**\n"
-            "1. Asegúrate de que el contenedor de PostgreSQL en Docker esté en ejecución:\n"
+            "🚨 **PostgreSQL Connection Error (Gold Layer)**\n\n"
+            f"Unable to establish database connection at `{config.db_host}:{config.db_port}/{config.db_name}`.\n\n"
+            "**Troubleshooting & Diagnosis:**\n"
+            "1. Ensure the PostgreSQL Docker container is running:\n"
             "   ```bash\n"
             "   docker-compose up -d postgres\n"
             "   ```\n"
-            "2. Verifica que las credenciales en el archivo `.env` coincidan con el servicio.\n"
-            f"3. Detalle del error: `{err_msg}`"
+            "2. Verify that credentials in `.env` match the target database service.\n"
+            f"3. Error detail: `{err_msg}`"
         )
-        if st.button("🔄 Reintentar Conexión"):
+        if st.button("🔄 Retry Connection"):
             st.cache_resource.clear()
             st.cache_data.clear()
             st.rerun()
@@ -209,13 +209,13 @@ def main() -> None:
     try:
         available_tickers = load_available_tickers(engine)
     except Exception as exc:
-        st.error(f"Error al consultar tickers disponibles en la base de datos: {exc}")
+        st.error(f"Error querying available tickers from database: {exc}")
         st.stop()
 
     if not available_tickers:
         st.warning(
-            "⚠️ La tabla `market_daily_metrics` en PostgreSQL no contiene registros aún.\n\n"
-            "Ejecuta el pipeline de ingestión de la Capa Oro para poblar los datos:\n"
+            "⚠️ The table `market_daily_metrics` in PostgreSQL has no records yet.\n\n"
+            "Run the Gold Layer ingestion pipeline to populate data:\n"
             "```bash\n"
             "python -m src.load_postgres\n"
             "```"
@@ -225,22 +225,22 @@ def main() -> None:
     # =====================================================================
     # Sidebar: Filters & Controls
     # =====================================================================
-    st.sidebar.header("🎛️ Filtros de Control")
+    st.sidebar.header("🎛️ Control Panel")
 
     # Primary Ticker Selector
     selected_ticker = st.sidebar.selectbox(
-        "📌 Activo Principal",
+        "📌 Primary Asset",
         options=available_tickers,
         index=0,
-        help="Selecciona el ticker principal para visualizar sus series históricas e indicadores.",
+        help="Select the primary equity ticker to inspect historical time series and technical indicators.",
     )
 
     # Comparison Multi-select
     comparison_tickers = st.sidebar.multiselect(
-        "📊 Comparar con Otros Activos",
+        "📊 Compare Assets",
         options=available_tickers,
         default=[t for t in available_tickers if t != selected_ticker][:2],
-        help="Selecciona activos adicionales para comparar retornos y desempeño relativo.",
+        help="Select additional tickers to compare returns and relative market performance.",
     )
 
     # Date Range Filter
@@ -254,11 +254,11 @@ def main() -> None:
         max_date = date.today()
 
     date_range = st.sidebar.date_input(
-        "📅 Rango de Fechas",
+        "📅 Date Range",
         value=(min_date, max_date),
         min_value=min_date,
         max_value=max_date,
-        help="Filtra el intervalo de tiempo para los gráficos y análisis.",
+        help="Filter the time range for visualizations and analytics.",
     )
 
     start_date: Optional[date] = None
@@ -268,13 +268,13 @@ def main() -> None:
 
     # Chart Style Toggle
     chart_type = st.sidebar.radio(
-        "📈 Modo de Gráfico Principal",
-        options=["Línea con Medias Móviles (SMA-7 / SMA-30)", "Velas Japonesas (OHLC)"],
+        "📈 Primary Chart View",
+        options=["Line with Moving Averages (SMA-7 / SMA-30)", "Candlestick (OHLC)"],
         index=0,
     )
 
     # Refresh Button
-    if st.sidebar.button("🔄 Refrescar Datos de Base de Datos"):
+    if st.sidebar.button("🔄 Refresh Database Cache"):
         st.cache_data.clear()
         st.rerun()
 
@@ -285,7 +285,7 @@ def main() -> None:
     df_primary = load_ticker_metrics(engine, selected_ticker, start_date=start_date, end_date=end_date)
 
     if df_primary.empty:
-        st.warning(f"No se encontraron datos para {selected_ticker} en el rango seleccionado.")
+        st.warning(f"No records found for {selected_ticker} within the selected date range.")
         st.stop()
 
     # =====================================================================
@@ -303,14 +303,14 @@ def main() -> None:
 
     with kpi1:
         st.metric(
-            label=f"Último Cierre ({selected_ticker})",
+            label=f"Latest Close ({selected_ticker})",
             value=f"${latest_record['close']:,.2f}",
             delta=f"{delta_price:+,.2f} USD ({daily_ret_pct:+.2f}%)" if prev_record is not None else None,
         )
 
     with kpi2:
         st.metric(
-            label="Retorno Diario",
+            label="Daily Return",
             value=f"{daily_ret_pct:+.2f}%",
             delta=f"{daily_ret_pct:+.2f}%",
             delta_color="normal",
@@ -318,16 +318,16 @@ def main() -> None:
 
     with kpi3:
         st.metric(
-            label="Volatilidad Móvil 7d",
+            label="7d Rolling Volatility",
             value=f"{vol_7_pct:.2f}%",
-            help="Desviación estándar de los retornos diarios calculada en una ventana de 7 sesiones.",
+            help="Rolling 7-day standard deviation of daily percentage returns.",
         )
 
     with kpi4:
         st.metric(
-            label="Volumen Transado",
-            value=f"{int(latest_record['volume']):,}",
-            help="Total de acciones negociadas en la sesión bursátil más reciente.",
+            label="Traded Volume",
+            value=f"{int(latest_record['volume']):,} shares",
+            help="Total shares traded during the most recent market session.",
         )
 
     st.markdown("---")
@@ -335,11 +335,11 @@ def main() -> None:
     # =====================================================================
     # Main Price Chart with Technical Indicators
     # =====================================================================
-    st.subheader(f"📊 Evolución de Precios e Indicadores Técnicos — {selected_ticker}")
+    st.subheader(f"📊 Price Trends & Technical Indicators — {selected_ticker}")
 
     fig_main = go.Figure()
 
-    if chart_type == "Velas Japonesas (OHLC)":
+    if chart_type == "Candlestick (OHLC)":
         fig_main.add_trace(
             go.Candlestick(
                 x=df_primary["date"],
@@ -347,7 +347,7 @@ def main() -> None:
                 high=df_primary["high"],
                 low=df_primary["low"],
                 close=df_primary["close"],
-                name="Velas OHLC",
+                name="OHLC Candlestick",
                 increasing_line_color="#22C55E",
                 decreasing_line_color="#EF4444",
             )
@@ -358,7 +358,7 @@ def main() -> None:
                 x=df_primary["date"],
                 y=df_primary["close"],
                 mode="lines",
-                name="Precio de Cierre",
+                name="Close Price",
                 line=dict(color="#2563EB", width=2.5),
             )
         )
@@ -370,7 +370,7 @@ def main() -> None:
                 x=df_primary["date"],
                 y=df_primary["sma_7"],
                 mode="lines",
-                name="SMA 7 (Corto Plazo)",
+                name="SMA 7 (Short-Term)",
                 line=dict(color="#F59E0B", width=1.8, dash="solid"),
             )
         )
@@ -381,7 +381,7 @@ def main() -> None:
                 x=df_primary["date"],
                 y=df_primary["sma_30"],
                 mode="lines",
-                name="SMA 30 (Medio Plazo)",
+                name="SMA 30 (Mid-Term)",
                 line=dict(color="#8B5CF6", width=1.8, dash="dash"),
             )
         )
@@ -391,13 +391,13 @@ def main() -> None:
         height=480,
         margin=dict(l=20, r=20, t=30, b=20),
         xaxis=dict(
-            title="Fecha",
+            title="Date",
             rangeslider=dict(visible=False),
             showgrid=True,
             gridcolor="#F3F4F6",
         ),
         yaxis=dict(
-            title="Precio en USD ($)",
+            title="Price in USD ($)",
             tickprefix="$",
             showgrid=True,
             gridcolor="#F3F4F6",
@@ -420,7 +420,7 @@ def main() -> None:
     col_vol, col_risk = st.columns(2)
 
     with col_vol:
-        st.subheader("📦 Volumen Diario Negociado")
+        st.subheader("📦 Daily Traded Volume")
         colors = [
             "#22C55E" if ret is not None and ret >= 0 else "#EF4444"
             for ret in df_primary["daily_return"]
@@ -431,7 +431,7 @@ def main() -> None:
                     x=df_primary["date"],
                     y=df_primary["volume"],
                     marker_color=colors,
-                    name="Volumen",
+                    name="Volume",
                 )
             ]
         )
@@ -439,13 +439,13 @@ def main() -> None:
             template="plotly_white",
             height=320,
             margin=dict(l=20, r=20, t=20, b=20),
-            xaxis=dict(title="Fecha", showgrid=True, gridcolor="#F3F4F6"),
-            yaxis=dict(title="Volumen (Acciones)", showgrid=True, gridcolor="#F3F4F6"),
+            xaxis=dict(title="Date", showgrid=True, gridcolor="#F3F4F6"),
+            yaxis=dict(title="Volume (Shares)", showgrid=True, gridcolor="#F3F4F6"),
         )
         st.plotly_chart(fig_vol, use_container_width=True)
 
     with col_risk:
-        st.subheader("⚡ Volatilidad Móvil 7d y Retorno Diario")
+        st.subheader("⚡ 7d Volatility & Daily Return")
         fig_risk = make_subplots(specs=[[{"secondary_y": True}]])
 
         # Bar for daily returns
@@ -453,7 +453,7 @@ def main() -> None:
             go.Bar(
                 x=df_primary["date"],
                 y=df_primary["daily_return"] * 100,
-                name="Retorno Diario (%)",
+                name="Daily Return (%)",
                 marker_color="#93C5FD",
                 opacity=0.6,
             ),
@@ -465,7 +465,7 @@ def main() -> None:
             go.Scatter(
                 x=df_primary["date"],
                 y=df_primary["volatility_7"] * 100,
-                name="Volatilidad 7d (%)",
+                name="7d Volatility (%)",
                 line=dict(color="#DC2626", width=2.2),
             ),
             secondary_y=True,
@@ -478,8 +478,8 @@ def main() -> None:
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             hovermode="x unified",
         )
-        fig_risk.update_yaxes(title_text="Retorno (%)", secondary_y=False, showgrid=False)
-        fig_risk.update_yaxes(title_text="Volatilidad (%)", secondary_y=True, showgrid=True, gridcolor="#F3F4F6")
+        fig_risk.update_yaxes(title_text="Return (%)", secondary_y=False, showgrid=False)
+        fig_risk.update_yaxes(title_text="Volatility (%)", secondary_y=True, showgrid=True, gridcolor="#F3F4F6")
         st.plotly_chart(fig_risk, use_container_width=True)
 
     # =====================================================================
@@ -489,10 +489,9 @@ def main() -> None:
 
     if len(all_selected_tickers) > 1:
         st.markdown("---")
-        st.subheader("🔄 Comparativa de Rendimiento Relativo (Base 100)")
+        st.subheader("🔄 Relative Performance Comparison (Base 100)")
         st.caption(
-            "Evolución porcentual normalizada (Base 100 al inicio del período) para comparar el rendimiento "
-            "entre distintos activos bursátiles."
+            "Normalized performance (Base = 100 at start of selected window) for cross-sectional asset return comparison."
         )
 
         fig_comp = go.Figure()
@@ -517,9 +516,9 @@ def main() -> None:
             template="plotly_white",
             height=380,
             margin=dict(l=20, r=20, t=20, b=20),
-            xaxis=dict(title="Fecha", showgrid=True, gridcolor="#F3F4F6"),
+            xaxis=dict(title="Date", showgrid=True, gridcolor="#F3F4F6"),
             yaxis=dict(
-                title="Rendimiento Normalizado (Base = 100)",
+                title="Normalized Return (Base = 100)",
                 showgrid=True,
                 gridcolor="#F3F4F6",
             ),
@@ -532,7 +531,7 @@ def main() -> None:
     # Market Summary Table & CSV Export
     # =====================================================================
     st.markdown("---")
-    st.subheader("📋 Resumen Comparativo del Mercado")
+    st.subheader("📋 Market Summary Matrix")
 
     summary_df = load_market_summary(engine)
     if not summary_df.empty:
@@ -543,14 +542,14 @@ def main() -> None:
         )
 
     # Download Data Button
-    st.subheader(f"📥 Descarga de Datos Filtrados — {selected_ticker}")
+    st.subheader(f"📥 Download Filtered Data — {selected_ticker}")
     csv_data = df_primary.to_csv(index=False).encode("utf-8")
     st.download_button(
-        label=f"⬇️ Descargar CSV de {selected_ticker} ({len(df_primary)} registros)",
+        label=f"⬇️ Download {selected_ticker} CSV ({len(df_primary)} records)",
         data=csv_data,
         file_name=f"{selected_ticker}_gold_metrics_{date.today().strftime('%Y%m%d')}.csv",
         mime="text/csv",
-        help="Descarga la serie histórica filtrada de la Capa Oro en formato CSV.",
+        help="Export filtered Gold Layer historical time-series as CSV.",
     )
 
 
